@@ -33,12 +33,14 @@
   var F = {
     mosque: ['mosqueName','mosque_name','mosque','masjid','masjidName','mosqueTitle','mosque_title','mosqueId'],
     title:  ['title','serviceName','service_name','service','type','requestType','request_type','category','subject'],
-    desc:   ['description','desc','details','notes','note','problem','message','body','text'],
+    desc:   ['description','comment','comments','requestDetails','problemDescription','desc','details','notes','note','problem','message','body','text'],
     status: ['status','state','requestStatus','request_status','orderStatus'],
-    date:   ['createdAt','created_at','date','timestamp','time','requestDate','request_date','updatedAt','created'],
-    user:   ['userName','user_name','name','fullName','full_name','imamName','requesterName','displayName'],
-    phone:  ['phone','phoneNumber','phone_number','mobile','userPhone','user_phone'],
-    district:['district','neighborhood','hay','area','city'],
+    date:   ['requestTimestamp','request_timestamp','createdAt','created_at','date','timestamp','time','requestDate','request_date','updatedAt','created'],
+    user:   ['applicantName','applicant_name','userName','user_name','name','fullName','full_name','imamName','requesterName','displayName'],
+    phone:  ['contactNumber','contact_number','phone','phoneNumber','phone_number','mobile','userPhone','user_phone'],
+    district:['neighborhoodName','neighborhood_name','district','neighborhood','hay','area','city'],
+    map:    ['mosqueAddress','mosque_address','mosqueLocation','location','mapUrl','map'],
+    agent:  ['assignedAgent','assigned_agent','agentName'],
     images: ['images','photos','imageUrls','image_urls','imageUrl','image','photo','attachments','pictures']
   };
   function pick(d, list){
@@ -78,11 +80,12 @@
     })(v);
     return out.filter(function(u, i){ return out.indexOf(u) === i; });
   }
+  function qty(d){ return Object.keys(d).filter(function(k){ return /quantity|count|amount|number_of|qty/i.test(k) && !/contact|phone/i.test(k) && d[k] !== '' && d[k] != null; }).map(function(k){ return txt(d[k]); }).join('، '); }
   function th(u, w){ return typeof window.cldThumb === 'function' ? window.cldThumb(u, w) : u; }
   function allImgs(d){ var L = imgs(pick(d, F.images)); if (!L.length) Object.keys(d).forEach(function(k){ if (/image|photo|attach|pic|صور/i.test(k)) L = L.concat(imgs(d[k])); }); return L.filter(function(u, i){ return L.indexOf(u) === i; }); }
   function stTone(s){
     s = String(s || '').toLowerCase();
-    if (/منته|مكتمل|تم|done|complet|closed|finish/.test(s)) return 'ok';
+    if (/الانتهاء|انتهى|منته|مكتمل|مغلق|done|complet|closed|finish/.test(s)) return 'ok';
     if (/رفض|ملغ|reject|cancel/.test(s)) return 'bad';
     if (/جار|تنفيذ|progress|working|accepted|مقبول/.test(s)) return 'gold';
     return 'warn';
@@ -160,8 +163,8 @@
     while (S.requests.some(function(x){ return x.id === 'APP-' + num; })) num++;
     var atts = allImgs(d).map(function(u, i){ return {id: 'F-APP-' + num + '-' + i, name: 'صورة من التطبيق ' + (i + 1), type: 'image', data: th(u, 1600)}; });
     return {id: 'APP-' + num, mosque: txt(pick(d,F.mosque)) || 'غير محدد', district: txt(pick(d,F.district)), svc: SVC_BY_COL[c.k] || 'SRV-103',
-      title: txt(pick(d,F.title)) || c.t, by: txt(pick(d,F.user)) || 'مستخدم التطبيق', byRole: 'مقدم الطلب', phone: txt(pick(d,F.phone)),
-      date: dt ? dt.toISOString().slice(0,10) : today(), priority: 'متوسطة', status: 'جديدة', rep: '', opts: [], note: txt(pick(d,F.desc)),
+      title: (txt(pick(d,F.title)) || c.t) + (qty(d) ? ' · ' + qty(d) : ''), map: (function(){ var m = txt(pick(d,F.map)); return /^https?:/.test(m) ? m : ''; })(), by: txt(pick(d,F.user)) || 'مستخدم التطبيق', byRole: 'مقدم الطلب', phone: txt(pick(d,F.phone)),
+      date: dt ? dt.toISOString().slice(0,10) : today(), priority: 'متوسطة', status: 'جديدة', rep: '', opts: [], note: [txt(pick(d,F.desc)), qty(d) ? 'الكمية: ' + qty(d) : '', txt(pick(d,F.agent)) ? 'المندوب في التطبيق: ' + txt(pick(d,F.agent)) : '', txt(pick(d,F.status)) ? 'الحالة في التطبيق: ' + txt(pick(d,F.status)) : ''].filter(Boolean).join(' · '),
       atts: atts, rating: 0, notes: [{t: 'وصل من تطبيق المساجد (' + c.k + ' / ' + r.id + ')', by: by || 'النظام', at: today()}], appRef: {col: c.k, id: r.id}, fromApp: 1};
   }
   function importReq(r){
