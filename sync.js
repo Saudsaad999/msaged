@@ -197,7 +197,7 @@
   }).then(function(remote){
     apply(remote);
     /* الأقسام الموجودة هنا وغير الموجودة في القاعدة تُرفع (أول تشغيل) */
-    ready = true;
+    ready = true; window.__zulfiSyncReady = true;
     Object.keys(S).forEach(function(k){ if (canWrite(k) && !(k in remote)) delete base[k]; });
     push();
     adapter.subscribe(function(m){ apply(m); });
