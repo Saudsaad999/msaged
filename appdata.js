@@ -5,7 +5,7 @@
 (function(){
   'use strict';
   if (typeof VIEWS === 'undefined' || typeof NAV_FULL === 'undefined') return;
-
+ 
   /* أقسام التطبيق في القاعدة */
   var COLS = [
     {k:'maintenance_requests', t:'طلبات الصيانة', i:'build', req:1},
@@ -28,7 +28,7 @@
   var DATA = {};        /* col -> [{id, d}] */
   var STATE = {};       /* col -> 'loading' | 'ok' | 'denied' | 'error' */
   var started = false;
-
+ 
   /* ---------- اكتشاف الحقول الشائعة ---------- */
   var F = {
     mosque: ['mosqueName','mosque_name','mosque','masjid','masjidName','mosqueTitle','mosque_title','mosqueId'],
@@ -87,7 +87,7 @@
     if (/جار|تنفيذ|progress|working|accepted|مقبول/.test(s)) return 'gold';
     return 'warn';
   }
-
+ 
   /* ---------- الاتصال ---------- */
   function fbReady(){ return window.firebase && firebase.apps && firebase.apps.length && firebase.firestore; }
   function start(){
@@ -100,7 +100,7 @@
         db.collection(c.k).limit(500).onSnapshot(function(qs){
           var L = []; qs.forEach(function(doc){ L.push({id: doc.id, d: doc.data()}); });
           L.sort(function(a,b){ var x = toDate(pick(a.d,F.date)), y = toDate(pick(b.d,F.date)); return (y ? y.getTime() : 0) - (x ? x.getTime() : 0); });
-          DATA[c.k] = L; STATE[c.k] = 'ok'; refresh();
+          DATA[c.k] = L; STATE[c.k] = 'ok'; if (c.req) { try { autoImport(c.k); } catch(e){ console.warn('[app-data] auto', e); } } refresh();
         }, function(err){
           STATE[c.k] = /permission/i.test(String(err && (err.code || err.message))) ? 'denied' : 'error';
           console.warn('[app-data]', c.k, err && err.code); refresh();
@@ -112,7 +112,7 @@
   }
   var rT = null;
   function refresh(){ if (UI.view !== 'app_live') return; clearTimeout(rT); rT = setTimeout(function(){ var a = document.activeElement; if (a && /INPUT|TEXTAREA/.test(a.tagName) && a.closest('#view')) return; render(); }, 250); }
-
+ 
   /* ---------- الصفحة ---------- */
   function counts(c){ return STATE[c.k] === 'ok' ? (DATA[c.k] || []).length : STATE[c.k] === 'denied' ? '🔒' : '…'; }
   VIEWS.app_live = function(){
@@ -138,12 +138,12 @@
       L.map(function(r){ var ks = Object.keys(r.d).slice(0,4);
         return '<tr><td class="num tiny">' + esc(r.id.slice(0,14)) + '</td><td class="small">' + ks.map(function(k){ return '<span class="muted">' + esc(k) + ':</span> ' + esc(txt(r.d[k]).slice(0,50)); }).join(' · ') + '</td><td><button class="btn sm" data-act="appDoc" data-id="' + esc(r.id) + '">' + ic('visibility') + 'عرض</button></td></tr>'; }).join('') + '</tbody></table></div>';
     return head('بيانات التطبيق', 'بيانات تطبيق المساجد (مباشر)', 'تُقرأ مباشرة من قاعدة التطبيق وتتحدث لحظياً، دون أي تعديل عليها. يمكن تحويل أي طلب إلى طلب في النظام لإسناده وتنفيذه بالمراحل الخمس.',
-        '<button class="btn" data-act="appSchema">' + ic('data_object') + 'نسخ هيكل الحقول</button>') +
+        '<button class="btn pri" data-act="appOpen">' + ic('download') + 'استقبال كل الطلبات المفتوحة</button><button class="btn" data-act="appSchema">' + ic('data_object') + 'نسخ هيكل الحقول</button>') +
       '<div class="grid g3">' + [['طلبات التطبيق', reqTotal, 'assignment'], ['المستخدمون', (DATA.users || []).length, 'group'], ['الخدمات', (DATA.services || []).length, 'home_repair_service']].map(function(k){ return '<div class="card kpi"><div class="k-top"><span>' + k[0] + '</span><span class="k-ic">' + ic(k[2]) + '</span></div><div class="k-val num">' + k[1] + '</div></div>'; }).join('') + '</div>' +
       '<div class="chips">' + COLS.map(function(x){ return '<button class="chip ' + (x.k === c.k ? 'on' : '') + '" data-act="appCol" data-id="' + x.k + '">' + ic(x.i) + ' ' + esc(x.t) + ' (' + counts(x) + ')</button>'; }).join('') + '</div>' +
       '<div class="field"><input class="inp" id="appQ" placeholder="ابحث في «' + esc(c.t) + '» بأي كلمة أو رقم…" value="' + esc(UI.appQ || '') + '"></div>' + body;
   };
-
+ 
   function findDoc(id){ var c = UI.appCol || 'maintenance_requests'; return (DATA[c] || []).filter(function(r){ return r.id === id; })[0]; }
   function docModal(r){
     var c = UI.appCol || 'maintenance_requests';
@@ -152,26 +152,57 @@
     modal({title: c + ' / ' + r.id, icon: 'data_object', wide: 1, ok: 'إغلاق', onOk: function(){},
       body: '<div class="tbl-wrap"><table><thead><tr><th>الحقل</th><th>القيمة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'});
   }
-  function importReq(r){
-    var c = COLS.filter(function(x){ return x.k === (UI.appCol || 'maintenance_requests'); })[0];
-    var exist = S.requests.filter(function(x){ return x.appRef && x.appRef.col === c.k && x.appRef.id === r.id; })[0];
-    if (exist) { toast('هذا الطلب محوَّل مسبقاً: ' + exist.id, 'info'); UI.rv = exist.id; try { openReq(exist.id); } catch(e){} return; }
-    var d = r.d, svcByCol = {maintenance_requests:'SRV-103', repair_requests:'SRV-106', cleaning_requests:'SRV-102', care_requests:'SRV-108', water_requests:'SRV-105', prayer_room_requests:'SRV-107', tree_requests:'SRV-104'};
-    var dt = toDate(pick(d,F.date)), num = 1000 + S.requests.length + 1;
+  var SVC_BY_COL = {maintenance_requests:'SRV-103', repair_requests:'SRV-106', cleaning_requests:'SRV-102', care_requests:'SRV-108', water_requests:'SRV-105', prayer_room_requests:'SRV-107', tree_requests:'SRV-104'};
+  function imported(col, id){ return (S.requests || []).filter(function(x){ return x.appRef && x.appRef.col === col && x.appRef.id === id; })[0]; }
+  function buildReq(col, r, by){
+    var c = COLS.filter(function(x){ return x.k === col; })[0] || {k: col, t: col};
+    var d = r.d, dt = toDate(pick(d,F.date)), num = 1000 + S.requests.length + 1;
     while (S.requests.some(function(x){ return x.id === 'APP-' + num; })) num++;
     var atts = allImgs(d).map(function(u, i){ return {id: 'F-APP-' + num + '-' + i, name: 'صورة من التطبيق ' + (i + 1), type: 'image', data: th(u, 1600)}; });
-    var nr = {id: 'APP-' + num, mosque: txt(pick(d,F.mosque)) || 'غير محدد', district: txt(pick(d,F.district)), svc: svcByCol[c.k] || 'SRV-103',
+    return {id: 'APP-' + num, mosque: txt(pick(d,F.mosque)) || 'غير محدد', district: txt(pick(d,F.district)), svc: SVC_BY_COL[c.k] || 'SRV-103',
       title: txt(pick(d,F.title)) || c.t, by: txt(pick(d,F.user)) || 'مستخدم التطبيق', byRole: 'مقدم الطلب', phone: txt(pick(d,F.phone)),
       date: dt ? dt.toISOString().slice(0,10) : today(), priority: 'متوسطة', status: 'جديدة', rep: '', opts: [], note: txt(pick(d,F.desc)),
-      atts: atts, rating: 0, notes: [{t: 'حُوِّل من تطبيق المساجد (' + c.k + ' / ' + r.id + ')', by: (me() || {}).name || 'الإدارة', at: today()}], appRef: {col: c.k, id: r.id}};
+      atts: atts, rating: 0, notes: [{t: 'وصل من تطبيق المساجد (' + c.k + ' / ' + r.id + ')', by: by || 'النظام', at: today()}], appRef: {col: c.k, id: r.id}, fromApp: 1};
+  }
+  function importReq(r){
+    var col = UI.appCol || 'maintenance_requests', exist = imported(col, r.id);
+    if (exist) { toast('هذا الطلب محوَّل مسبقاً: ' + exist.id, 'info'); try { openReq(exist.id); } catch(e){} return; }
+    var nr = buildReq(col, r, (me() || {}).name || 'الإدارة');
     S.requests.unshift(nr); save(); toast('حُوِّل إلى الطلب ' + nr.id + '، ويمكنك إسناده الآن', 'add_task');
     try { openReq(nr.id); } catch(e){ go('requests'); }
   }
+  /* الاستقبال التلقائي: كل طلب جديد من التطبيق يدخل «الطلبات» مباشرة بحالة «جديدة» */
+  var AUTO_DAYS = 7;
+  function autoImport(col){
+    if (!window.__zulfiSyncReady || !Array.isArray(S.requests)) return;
+    if (!S.appSyncFrom) { S.appSyncFrom = Date.now() - AUTO_DAYS * 864e5; }
+    var from = S.appSyncFrom, added = [];
+    (DATA[col] || []).forEach(function(r){
+      if (imported(col, r.id)) return;
+      var dt = toDate(pick(r.d, F.date)); if (!dt || dt.getTime() < from) return;
+      if (stTone(pick(r.d, F.status)) === 'ok' || stTone(pick(r.d, F.status)) === 'bad') return;
+      var nr = buildReq(col, r, 'النظام'); S.requests.unshift(nr); added.push(nr);
+    });
+    if (!added.length) return;
+    S.notifs = S.notifs || [];
+    added.forEach(function(nr){ S.notifs.unshift({t: 'طلب جديد من تطبيق المساجد: ' + nr.title + ' - ' + nr.mosque, at: 'الآن', go: 'requests'}); });
+    save();
+    try { toast(added.length === 1 ? 'وصل طلب جديد من التطبيق: ' + added[0].mosque : 'وصلت ' + added.length + ' طلبات جديدة من التطبيق', 'notifications_active'); } catch(e){}
+    if (UI.view === 'requests' || UI.view === 'home') { try { render(); } catch(e){} }
+  }
+  function importOpen(){
+    var n = 0;
+    COLS.filter(function(c){ return c.req; }).forEach(function(c){ (DATA[c.k] || []).forEach(function(r){
+      if (imported(c.k, r.id)) return; var t = stTone(pick(r.d, F.status)); if (t === 'ok' || t === 'bad') return;
+      S.requests.unshift(buildReq(c.k, r, (me() || {}).name || 'الإدارة')); n++; }); });
+    if (n) save(); toast(n ? 'استُقبل ' + n + ' طلباً مفتوحاً من التطبيق' : 'لا توجد طلبات مفتوحة غير مستقبلة', n ? 'download_done' : 'info'); render();
+  }
   document.addEventListener('click', function(e){
-    var t = e.target.closest('[data-act="appCol"],[data-act="appDoc"],[data-act="appImport"],[data-act="appSchema"]'); if (!t) return;
+    var t = e.target.closest('[data-act="appCol"],[data-act="appDoc"],[data-act="appImport"],[data-act="appSchema"],[data-act="appOpen"]'); if (!t) return;
     e.stopImmediatePropagation(); var a = t.dataset.act;
     if (a === 'appCol') { UI.appCol = t.dataset.id; UI.appQ = ''; render(); }
     else if (a === 'appDoc') { var r = findDoc(t.dataset.id); if (r) docModal(r); }
+    else if (a === 'appOpen') { importOpen(); }
     else if (a === 'appImport') { var r2 = findDoc(t.dataset.id); if (r2) importReq(r2); }
     else if (a === 'appSchema') {
       var out = {};
@@ -185,11 +216,14 @@
     }
   }, true);
   document.addEventListener('input', function(e){ if (e.target.id === 'appQ') { UI.appQ = e.target.value; clearTimeout(rT); rT = setTimeout(function(){ render(); var i = document.getElementById('appQ'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 300); } });
-
+ 
   /* ---------- إضافة الخانة للقائمة الجانبية (للموظفين) ---------- */
   var item = {k: 'app_live', t: 'بيانات التطبيق (مباشر)', i: 'smartphone', b: function(){ return 0; }};
   var gi = NAV_FULL.findIndex(function(g){ return g.g === 'الطلبات والميدان'; });
   if (gi > -1) NAV_FULL[gi].items.splice(1, 0, item); else NAV_FULL.splice(1, 0, {g: 'تطبيق المساجد', items: [item]});
   try { if (typeof applyNavPerms === 'function' && STAFF.user) applyNavPerms(); } catch(e){}
   setTimeout(start, 1500);
+  var wReady = setInterval(function(){ if (!window.__zulfiSyncReady) return; clearInterval(wReady);
+    COLS.forEach(function(c){ if (c.req && STATE[c.k] === 'ok') { try { autoImport(c.k); } catch(e){} } }); }, 1000);
 })();
+ 
