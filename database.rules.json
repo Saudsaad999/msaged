@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "zulfi": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}
