@@ -67,12 +67,19 @@
     var out = [];
     (function walk(x){
       if (!x) return;
-      if (typeof x === 'string') { if (/^https?:\/\/|^data:image/.test(x)) out.push(x); return; }
+      if (typeof x === 'string') {
+        var t = x.trim();
+        if (t.charAt(0) === '{' || t.charAt(0) === '[') { try { walk(JSON.parse(t)); } catch(e){} return; }
+        if (/^https?:\/\/|^data:image/.test(t) && (/\.(jpe?g|png|webp|gif|heic)(\?|$)/i.test(t) || /res\.cloudinary\.com|firebasestorage|googleusercontent|^data:image/.test(t))) out.push(t.replace(/^http:\/\//, 'https://'));
+        return;
+      }
       if (Array.isArray(x)) { x.forEach(walk); return; }
-      if (typeof x === 'object') ['url','src','downloadUrl','downloadURL','link'].forEach(function(k){ if (x[k]) walk(x[k]); });
+      if (typeof x === 'object') { if (x.secure_url) { walk(x.secure_url); return; } ['url','src','downloadUrl','downloadURL','link','imageUrl','image'].forEach(function(k){ if (x[k]) walk(x[k]); }); }
     })(v);
-    return out;
+    return out.filter(function(u, i){ return out.indexOf(u) === i; });
   }
+  function th(u, w){ return typeof window.cldThumb === 'function' ? window.cldThumb(u, w) : u; }
+  function allImgs(d){ var L = imgs(pick(d, F.images)); if (!L.length) Object.keys(d).forEach(function(k){ if (/image|photo|attach|pic|صور/i.test(k)) L = L.concat(imgs(d[k])); }); return L.filter(function(u, i){ return L.indexOf(u) === i; }); }
   function stTone(s){
     s = String(s || '').toLowerCase();
     if (/منته|مكتمل|تم|done|complet|closed|finish/.test(s)) return 'ok';
@@ -122,7 +129,7 @@
     else if (!L.length) body = '<div class="card empty">لا توجد سجلات' + (q ? ' مطابقة للبحث' : '') + '.</div>';
     else if (c.req) body = '<div class="tbl-wrap card"><table><thead><tr><th>#</th><th>المسجد</th><th>الطلب</th><th>الحالة</th><th>التاريخ</th><th>مقدم الطلب</th><th></th></tr></thead><tbody>' +
       L.map(function(r){ var d = r.d, st = pick(d,F.status);
-        return '<tr><td class="num tiny">' + esc(r.id.slice(0,10)) + '</td><td><b class="small">' + esc(txt(pick(d,F.mosque)) || '—') + '</b>' + (pick(d,F.district) ? '<div class="tiny muted">' + esc(txt(pick(d,F.district))) + '</div>' : '') + '</td>' +
+        return '<tr><td class="num tiny">' + esc(r.id.slice(0,10)) + '</td><td>' + (function(){ var im = allImgs(d); return im.length ? '<div class="row" style="flex-wrap:nowrap;gap:8px;margin-bottom:4px"><img src="' + esc(th(im[0], 120)) + '" style="width:44px;height:44px;border-radius:6px;object-fit:cover;flex:none" alt=""><span class="tiny muted">' + im.length + ' صور</span></div>' : ''; })() + '<b class="small">' + esc(txt(pick(d,F.mosque)) || '—') + '</b>' + (pick(d,F.district) ? '<div class="tiny muted">' + esc(txt(pick(d,F.district))) + '</div>' : '') + '</td>' +
           '<td class="small">' + esc((txt(pick(d,F.title)) || c.t)) + '<div class="tiny muted">' + esc(txt(pick(d,F.desc)).slice(0,70)) + '</div></td>' +
           '<td>' + (st != null ? '<span class="pill ' + stTone(st) + '">' + esc(txt(st)) + '</span>' : '—') + '</td><td class="num tiny">' + esc(fmtD(pick(d,F.date))) + '</td>' +
           '<td class="small">' + esc(txt(pick(d,F.user)) || '—') + '<div class="tiny muted num">' + esc(txt(pick(d,F.phone))) + '</div></td>' +
@@ -141,7 +148,7 @@
   function docModal(r){
     var c = UI.appCol || 'maintenance_requests';
     var rows = Object.keys(r.d).sort().map(function(k){ var v = r.d[k], im = imgs(v);
-      return '<tr><td class="num tiny" style="white-space:nowrap">' + esc(k) + '</td><td class="small" style="word-break:break-word">' + (im.length ? im.map(function(u){ return '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" style="height:70px;border-radius:6px;margin:2px"></a>'; }).join('') : esc(txt(v))) + '</td></tr>'; }).join('');
+      return '<tr><td class="num tiny" style="white-space:nowrap">' + esc(k) + '</td><td class="small" style="word-break:break-word">' + (im.length ? im.map(function(u){ return '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(th(u, 300)) + '" style="height:90px;border-radius:6px;margin:2px;object-fit:cover"></a>'; }).join('') : esc(txt(v))) + '</td></tr>'; }).join('');
     modal({title: c + ' / ' + r.id, icon: 'data_object', wide: 1, ok: 'إغلاق', onOk: function(){},
       body: '<div class="tbl-wrap"><table><thead><tr><th>الحقل</th><th>القيمة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'});
   }
@@ -152,7 +159,7 @@
     var d = r.d, svcByCol = {maintenance_requests:'SRV-103', repair_requests:'SRV-106', cleaning_requests:'SRV-102', care_requests:'SRV-108', water_requests:'SRV-105', prayer_room_requests:'SRV-107', tree_requests:'SRV-104'};
     var dt = toDate(pick(d,F.date)), num = 1000 + S.requests.length + 1;
     while (S.requests.some(function(x){ return x.id === 'APP-' + num; })) num++;
-    var atts = imgs(pick(d,F.images)).map(function(u, i){ return {id: 'F-APP-' + num + '-' + i, name: 'صورة من التطبيق ' + (i + 1), type: 'image', data: u}; });
+    var atts = allImgs(d).map(function(u, i){ return {id: 'F-APP-' + num + '-' + i, name: 'صورة من التطبيق ' + (i + 1), type: 'image', data: th(u, 1600)}; });
     var nr = {id: 'APP-' + num, mosque: txt(pick(d,F.mosque)) || 'غير محدد', district: txt(pick(d,F.district)), svc: svcByCol[c.k] || 'SRV-103',
       title: txt(pick(d,F.title)) || c.t, by: txt(pick(d,F.user)) || 'مستخدم التطبيق', byRole: 'مقدم الطلب', phone: txt(pick(d,F.phone)),
       date: dt ? dt.toISOString().slice(0,10) : today(), priority: 'متوسطة', status: 'جديدة', rep: '', opts: [], note: txt(pick(d,F.desc)),
