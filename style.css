@@ -1337,6 +1337,11 @@ input[type=date]{background-image:none}
 .qty-cat{font-size:.78rem;font-weight:700;color:#8A6F3D;min-width:90px}
 .qty-i{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #D6DFE5;border-radius:999px;padding:3px 4px 3px 10px;font-size:.82rem;color:#17384C}
 .qty-i b{background:#1D5271;color:#fff;border-radius:999px;min-width:24px;height:24px;display:grid;place-items:center;font-size:.78rem;padding:0 6px}
+.mapx{border:1px solid #D6DFE5;border-radius:10px;overflow:hidden;margin:8px 0;background:#fff}
+.mapx-f{display:block;width:100%;height:240px;border:0}
+.mapx-b{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;background:#F5F7F9}
+.mapx-b .ms{color:#8A6F3D}
+@media(max-width:640px){.mapx-f{height:200px}.mapx-b .row{width:100%}.mapx-b .btn{flex:1;justify-content:center}}
 :root[data-theme="dark"] .brand-mark{background:var(--surface)}
 :root[data-theme="dark"] .switch span::after{background:var(--surface)}
 :root[data-theme="dark"] .lightbox img{background:var(--surface)}
@@ -1596,6 +1601,9 @@ input[type=date]{background-image:none}
 :root[data-theme="dark"] .qty-h .ms{color:var(--gold-strong)}
 :root[data-theme="dark"] .qty-cat{color:var(--gold-strong)}
 :root[data-theme="dark"] .qty-i{background:var(--surface);border:1px solid var(--line);color:var(--fg)}
+:root[data-theme="dark"] .mapx{border:1px solid var(--line);background:var(--surface)}
+:root[data-theme="dark"] .mapx-b{background:var(--surface-2)}
+:root[data-theme="dark"] .mapx-b .ms{color:var(--gold-strong)}
 @media (prefers-color-scheme:dark){:root:where(.app-admin):not([data-theme="light"]) .brand-mark{background:var(--surface)}
 :root:where(.app-admin):not([data-theme="light"]) .switch span::after{background:var(--surface)}
 :root:where(.app-admin):not([data-theme="light"]) .lightbox img{background:var(--surface)}
@@ -1842,7 +1850,10 @@ input[type=date]{background-image:none}
 :root:where(.app-admin):not([data-theme="light"]) .qty-h{color:var(--fg)}
 :root:where(.app-admin):not([data-theme="light"]) .qty-h .ms{color:var(--gold-strong)}
 :root:where(.app-admin):not([data-theme="light"]) .qty-cat{color:var(--gold-strong)}
-:root:where(.app-admin):not([data-theme="light"]) .qty-i{background:var(--surface);border:1px solid var(--line);color:var(--fg)}}
+:root:where(.app-admin):not([data-theme="light"]) .qty-i{background:var(--surface);border:1px solid var(--line);color:var(--fg)}
+:root:where(.app-admin):not([data-theme="light"]) .mapx{border:1px solid var(--line);background:var(--surface)}
+:root:where(.app-admin):not([data-theme="light"]) .mapx-b{background:var(--surface-2)}
+:root:where(.app-admin):not([data-theme="light"]) .mapx-b .ms{color:var(--gold-strong)}}
 @media (prefers-color-scheme:dark){:root:where(.app-portal):not([data-theme="light"]) .brand-mark{background:var(--surface)}
 :root:where(.app-portal):not([data-theme="light"]) .switch span::after{background:var(--surface)}
 :root:where(.app-portal):not([data-theme="light"]) .lightbox img{background:var(--surface)}
@@ -1955,7 +1966,10 @@ input[type=date]{background-image:none}
 :root:where(.app-portal):not([data-theme="light"]) .qty-h{color:var(--fg)}
 :root:where(.app-portal):not([data-theme="light"]) .qty-h .ms{color:var(--gold-strong)}
 :root:where(.app-portal):not([data-theme="light"]) .qty-cat{color:var(--gold-strong)}
-:root:where(.app-portal):not([data-theme="light"]) .qty-i{background:var(--surface);border:1px solid var(--line);color:var(--fg)}}
+:root:where(.app-portal):not([data-theme="light"]) .qty-i{background:var(--surface);border:1px solid var(--line);color:var(--fg)}
+:root:where(.app-portal):not([data-theme="light"]) .mapx{border:1px solid var(--line);background:var(--surface)}
+:root:where(.app-portal):not([data-theme="light"]) .mapx-b{background:var(--surface-2)}
+:root:where(.app-portal):not([data-theme="light"]) .mapx-b .ms{color:var(--gold-strong)}}
 :root[data-theme="dark"] .chat.wa .thread,:root[data-theme="dark"] .chat.wa .msgs{background-color:#0B141A}
 :root[data-theme="dark"] .chat.wa .msgs{background-image:radial-gradient(rgba(197,169,118,.07) 1px,transparent 1px)}
 :root[data-theme="dark"] .chat.wa .msg{background:#1F2C34;color:#E9EDEF;box-shadow:none}
