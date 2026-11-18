@@ -4348,6 +4348,19 @@ if(VIEWS.dn_home){const _dnhPL=VIEWS.dn_home;VIEWS.dn_home=function(){const h=_d
   const anchor=kids.find(e=>!e.classList.contains('page-head')&&!e.classList.contains('psearch'));if(!anchor)return h;
   plans.forEach(p=>{p.classList.add('dn-plan-top');t.content.insertBefore(p,anchor)});return t.innerHTML}catch(e){return h}}}
 
+/* ================= صفحة الدخول: أسماء التبويبات بدون كلمة «دخول» ================= */
+if(VIEWS.login){const _lgLT=VIEWS.login;VIEWS.login=function(){let h=_lgLT.apply(this,arguments);
+  [['دخول الموظفين','الموظفين'],['دخول أعضاء مجلس الإدارة','أعضاء مجلس الإدارة'],['دخول المندوب','المندوب'],['دخول المقاول','المقاول'],['دخول الجهات المانحة','الجهات المانحة']].forEach(([a,b])=>{h=h.split(a).join(b)});return h}}
+
+/* ================= الكميات المطلوبة في الطلب (من تطبيق المساجد أو الإدخال) ================= */
+const qtyTotal=r=>(r.qty||[]).reduce((a,g)=>a+(g.items||[]).reduce((b,i)=>b+(+i.q||0),0),0);
+const qtyHTML=r=>!(r&&r.qty&&r.qty.length)?'':`<div class="qty-box"><div class="qty-h">${ic('format_list_numbered')}<b>الكميات المطلوبة</b>${qtyTotal(r)?`<span class="pill num">${qtyTotal(r)} إجمالاً</span>`:''}</div><div class="qty-g">${r.qty.map(g=>`<div class="qty-c"><span class="qty-cat">${esc(g.cat)}</span>${(g.items||[]).map(i=>`<span class="qty-i">${esc(i.n)}<b class="num">${esc(String(i.q))}</b></span>`).join('')}</div>`).join('')}</div></div>`;
+function qtyInject(h,r){if(!r||!r.qty||!r.qty.length||h.indexOf('class="qty-box"')>-1)return h;
+  const marks=['<div class="info-tile"><span class="tiny muted">وصف الطلب','<div class="field"><label>وصف الطلب'];let k=-1;marks.forEach(m=>{const i=h.indexOf(m);if(i>-1&&(k<0||i<k))k=i});
+  return k<0?h:h.slice(0,k)+qtyHTML(r)+h.slice(k)}
+if(VIEWS.req_view){const _rvQ=VIEWS.req_view;VIEWS.req_view=function(){const h=_rvQ.apply(this,arguments);try{return qtyInject(h,S.requests.find(x=>x.id===UI.rv))}catch(e){return h}}}
+if(VIEWS.p_task){const _ptQ=VIEWS.p_task;VIEWS.p_task=function(){const h=_ptQ.apply(this,arguments);try{return qtyInject(h,S.requests.find(x=>x.id===UI.task))}catch(e){return h}}}
+
 /* ================= التواريخ: تُفتح بتقويم عند الضغط على الخانة ويُختار منه التاريخ ================= */
 const DP_SEL='input[type=date],input[type=datetime-local],input[type=month],input[type=time]';
 function dpOpen(i){if(!i||i.readOnly||i.disabled)return;if(i.type==='date'){hcOpen(i);return}try{if(typeof i.showPicker==='function')i.showPicker()}catch(e){}}
