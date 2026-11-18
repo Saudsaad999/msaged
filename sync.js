@@ -162,17 +162,43 @@
     }
     try { render(); } catch(e){ console.error('[zulfi-sync] render', e); }
   }
+  /* ---------- دمج السجلات: كل عنصر له id يُدمج وحده (الأحدث يفوز) بدل استبدال القائمة كاملة ---------- */
+  var seen = {};
+  function idArr(v){ return Array.isArray(v) && v.length > 0 && v.every(function(e){ return e && typeof e === 'object' && (typeof e.id === 'string' || typeof e.id === 'number'); }); }
+  function ej(e){ var u = e._u; if (u !== undefined) delete e._u; var j = J(e); if (u !== undefined) e._u = u; return j; }
+  function remember(k){ if (!idArr(S[k])) { delete seen[k]; return; } var m = {}; S[k].forEach(function(e){ m[e.id] = ej(e); }); seen[k] = m; }
+  function stamp(){
+    var now = Date.now();
+    Object.keys(S).forEach(function(k){ if (!canWrite(k) || !idArr(S[k])) return; var sk = seen[k] || (seen[k] = {});
+      S[k].forEach(function(e){ var j = ej(e); if (sk[e.id] !== j) { e._u = now; sk[e.id] = j; } }); });
+  }
+  function merge(k, R){
+    var L = S[k]; if (!idArr(L) || !Array.isArray(R) || !(R.length === 0 || idArr(R))) return R;
+    var Bm = {}; try { var B = base[k] ? JSON.parse(base[k]) : []; if (Array.isArray(B)) B.forEach(function(e){ if (e && e.id != null) Bm[e.id] = 1; }); } catch(e){}
+    var Lm = {}, Rm = {}; L.forEach(function(e){ Lm[e.id] = e; }); R.forEach(function(e){ Rm[e.id] = e; });
+    var out = [];
+    L.forEach(function(e){ if (!Rm[e.id] && !Bm[e.id]) out.push(e); });           /* جديد محلياً لم يُرفع بعد */
+    R.forEach(function(r){ var l = Lm[r.id];
+      if (!l) { if (!Bm[r.id]) out.push(r); return; }                              /* جديد من القاعدة، أو حُذف محلياً */
+      out.push((+l._u || 0) > (+r._u || 0) ? l : r); });
+    return out;
+  }
+  var firstLoad = true;
   function apply(map){
-    var changed = false;
+    var changed = false, needPush = false;
     Object.keys(map).forEach(function(k){
-      if (!isShared(k) && !(k in S) && k.charAt(0) === '_') return;
       if (k.charAt(0) === '_') return;
-      var str = map[k];
+      var str = map[k], R;
+      try { R = JSON.parse(str); } catch(e){ console.warn('[zulfi-sync] قسم تالف', k); return; }
+      var V = firstLoad ? R : merge(k, R);
       base[k] = str;
-      if (J(S[k]) === str) return;
-      try { S[k] = JSON.parse(str); changed = true; } catch(e){ console.warn('[zulfi-sync] قسم تالف', k); }
+      var vj = J(V);
+      if (vj !== str && canWrite(k)) needPush = true;
+      if (J(S[k]) === vj) { remember(k); return; }
+      S[k] = V; changed = true; remember(k);
     });
     if (changed) { localSave(); if (ready) safeRender(); }
+    if (needPush && ready && !pushTimer) pushTimer = setTimeout(push, 400);
     return changed;
   }
 
@@ -192,7 +218,7 @@
     Promise.all(jobs).then(function(){ status('ok', 'متصل · محفوظ في قاعدة البيانات'); })
       .catch(function(e){ console.error('[zulfi-sync] write', e); status('err', 'تعذر الحفظ في القاعدة: راجع الصلاحيات'); });
   }
-  save = function(){ var r = localSave.apply(this, arguments); if (ready && !pushTimer) pushTimer = setTimeout(push, 400); return r; };
+  save = function(){ if (ready) { try { stamp(); } catch(e){} } var r = localSave.apply(this, arguments); if (ready && !pushTimer) pushTimer = setTimeout(push, 400); return r; };
   window.addEventListener('beforeunload', function(){ if (pushTimer) { clearTimeout(pushTimer); push(); } });
 
   /* ---------- البدء ---------- */
@@ -209,7 +235,8 @@
     adapter = a;
     return adapter.loadAll();
   }).then(function(remote){
-    apply(remote);
+    apply(remote); firstLoad = false;
+    Object.keys(S).forEach(function(k){ if (canWrite(k)) remember(k); });
     /* الأقسام الموجودة هنا وغير الموجودة في القاعدة تُرفع (أول تشغيل) */
     ready = true; window.__zulfiSyncReady = true;
     Object.keys(S).forEach(function(k){ if (canWrite(k) && !(k in remote)) delete base[k]; });
