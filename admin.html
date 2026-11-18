@@ -1207,7 +1207,7 @@ document.addEventListener('input',e=>{const t=e.target;
 document.addEventListener('submit',e=>{const f=e.target;
   if(f.id==='composer'){e.preventDefault();const inp=$('#msgIn'),v=inp.value.trim();const atts=TMP.chat||[];if(!v&&!atts.length)return;const L=visibleChats();const c=L.find(x=>x.id===UI.chat)||L[0];if(!c)return;
     const isAdmin=SESSION.type==='admin';c.msgs.push({me:isAdmin?1:0,t:v,at:nowT(),atts:[...atts]});TMP.chat=[];if(!isAdmin)c.unread++;render();scrollMsgs();$('#msgIn')?.focus();
-    if(isAdmin)setTimeout(()=>{if(UI.view!=='chats')return;c.msgs.push({me:0,t:'وصلت رسالتكم، جزاكم الله خيراً. سنفيدكم بالتحديث قريباً.',at:nowT()});render();scrollMsgs()},1600)}
+    if(isAdmin)setTimeout(()=>{if(UI.view!=='chats')return;},1600)}
   else if(f.id==='profForm'){e.preventDefault();const me=repById(SESSION.id);const p=$('#pfP').value.replace(/\s/g,'');if(!/^0\d{8,9}$/.test(p)){toast('رقم الجوال غير صحيح','error');return}me.phone=p;me.email=$('#pfE').value.trim();me.zone=$('#pfZ').value.trim();logIt('تحديث البيانات الشخصية');toast('حُفظت بياناتك');render()}
   else if(f.id==='pwForm'){e.preventDefault();const me=repById(SESSION.id);const c=$('#pwC').value,n=$('#pwN').value,r=$('#pwR').value;
     if(c!==me.pw){toast('كلمة المرور الحالية غير صحيحة','error');return}if(!/^\d{4}$/.test(n)){toast('كلمة المرور 4 أرقام فقط','error');return}if(n!==r){toast('التأكيد لا يطابق كلمة المرور الجديدة','error');return}
