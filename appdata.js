@@ -250,50 +250,25 @@
   if (gi > -1) NAV_FULL[gi].items.splice(1, 0, item); else NAV_FULL.splice(1, 0, {g: 'تطبيق المساجد', items: [item]});
   try { if (typeof applyNavPerms === 'function' && STAFF.user) applyNavPerms(); } catch(e){}
 
-  /* ================= إرسال حالة الطلب من النظام إلى التطبيق ================= */
-  var SYS_ST = [['جديدة','بانتظار المراجعة'],['مقبول','قُبل وأُسند لمنفذ'],['جاري العمل','قيد التنفيذ'],['منتهي','أُغلق وسُلّم'],['مرفوض','مرفوض'],['معاد لمقدم الطلب','بحاجة لاستكمال مرفقات']];
-  var GUESS = {'جديدة':[/انتظار|جديد|pending|new/i,'في الانتظار'],'مقبول':[/قبول|مقبول|accept|assigned/i,'تم القبول'],'جاري العمل':[/تنفيذ|جاري|قيد|progress/i,'قيد التنفيذ'],
-    'منتهي':[/الانتهاء|انتهى|منته|مكتمل|complet|done/i,'تم الانتهاء'],'مرفوض':[/رفض|مرفوض|reject/i,'مرفوض'],'معاد لمقدم الطلب':[/استكمال|نواقص|معاد|return/i,'بحاجة لاستكمال']};
-  function observed(){ var set = {}; COLS.forEach(function(c){ if (!c.req) return; (DATA[c.k] || []).forEach(function(r){ var v = pick(r.d, F.status); if (typeof v === 'string' && v.trim()) set[v.trim()] = 1; }); }); return Object.keys(set); }
-  function stMap(){
-    var M = S.appStatusMap || {}, obs = observed(), out = {};
-    SYS_ST.forEach(function(x){ var k = x[0]; if (M[k]) { out[k] = M[k]; return; } var g = GUESS[k], hit = obs.filter(function(v){ return g[0].test(v); })[0]; out[k] = hit || g[1]; });
-    return out;
+  /* ================= ربط الحالات (يُرسلها appstatus.js عند كل مرحلة) ================= */
+  function observe(){
+    if (!window.ZAPP) return; var st = {}, ag = {};
+    COLS.forEach(function(c){ if (!c.req) return; (DATA[c.k] || []).forEach(function(r){ var v = pick(r.d, F.status), a = r.d && r.d.agentStatus;
+      if (typeof v === 'string' && v.trim()) st[v.trim()] = 1; if (typeof a === 'string' && a.trim()) ag[a.trim()] = 1; }); });
+    ZAPP.obs.status = Object.keys(st); ZAPP.obs.agentStatus = Object.keys(ag);
   }
-  function sysKey(r){ return r.status === 'جاري العمل' || (r.status === 'مقبول' && (r.stage || 1) >= 3) ? 'جاري العمل' : r.status; }
-  var pushing = {};
-  function pushStatuses(){
-    if (!fbReady() || !window.__zulfiSyncReady || !Array.isArray(S.requests)) return;
-    var db = firebase.firestore(), M = stMap(), changed = false;
-    S.requests.forEach(function(r){
-      if (!r.appRef || !r.appRef.col || !r.appRef.id) return;
-      if (!r.appKey) r.appKey = 'جديدة';
-      var k = sysKey(r); if (k === r.appKey || pushing[r.id] === k || !M[k]) return;
-      pushing[r.id] = k;
-      var upd = { status: M[k], isReadByAdmin: true, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(), statusUpdatedBy: 'لوحة التحكم' };
-      if (k === 'مرفوض' && r.reason) upd.rejectionReason = String(r.reason);
-      if (k === 'معاد لمقدم الطلب') { var lg = (r.returnedLog || []).slice(-1)[0] || r.returned || {}; upd.adminNote = [].concat(lg.needs || []).join('، ') + (lg.note ? ' · ' + lg.note : ''); }
-      if (k === 'منتهي' && r.report) upd.completionReport = String(r.report).slice(0, 2000);
-      db.collection(r.appRef.col).doc(r.appRef.id).update(upd).then(function(){
-        r.appKey = k; delete pushing[r.id]; r.notes = r.notes || []; r.notes.push({t: 'حُدّثت حالة الطلب في تطبيق المساجد إلى «' + M[k] + '»', by: 'النظام', at: today()}); _saveAD();
-      }).catch(function(err){
-        delete pushing[r.id]; console.warn('[app-data] status push', r.appRef, err && err.code);
-        try { toast(/permission/i.test(String(err && (err.code || err.message))) ? 'القاعدة ترفض تعديل حالة الطلب في التطبيق: راجع قواعد الأمان' : 'تعذر تحديث الحالة في التطبيق', 'sync_problem'); } catch(e){}
-      });
-      changed = true;
-    });
-  }
-  var _saveAD = save, pT = null;
-  save = function(){ var r = _saveAD.apply(this, arguments); clearTimeout(pT); pT = setTimeout(pushStatuses, 600); return r; };
-  setInterval(pushStatuses, 15000);
+  setInterval(observe, 5000);
   function mapModal(){
-    var M = stMap(), obs = observed();
-    var w = modal({title: 'ربط حالات الطلب مع التطبيق', icon: 'sync_alt', ok: 'حفظ', wide: 1,
-      body: '<p class="small muted">عند تغيّر حالة الطلب في النظام تُكتب في حقل <b>status</b> للطلب في التطبيق بالقيمة المحددة هنا، فيراها مقدم الطلب. القيم المقترحة مأخوذة من الحالات الموجودة فعلاً في التطبيق.</p>' +
-        (obs.length ? '<p class="tiny muted">الحالات الموجودة في التطبيق: ' + obs.map(esc).join(' · ') + '</p>' : '') +
-        '<datalist id="appStObs">' + obs.map(function(v){ return '<option value="' + esc(v) + '">'; }).join('') + '</datalist>' +
-        SYS_ST.map(function(x){ return '<div class="grid g2" style="align-items:center"><div><b class="small">' + esc(x[0]) + '</b><div class="tiny muted">' + esc(x[1]) + '</div></div><input class="inp" list="appStObs" data-stk="' + esc(x[0]) + '" value="' + esc(M[x[0]] || '') + '"></div>'; }).join(''),
-      onOk: function(w){ var o = {}; w.querySelectorAll('[data-stk]').forEach(function(i){ if (i.value.trim()) o[i.dataset.stk] = i.value.trim(); }); S.appStatusMap = o; save(); toast('حُفظ ربط الحالات', 'sync_alt'); }});
+    if (!window.ZAPP) { toast('ملف appstatus.js غير موجود في الموقع', 'error'); return; }
+    observe(); var M = ZAPP.maps(), O = ZAPP.obs;
+    modal({title: 'ربط حالات الطلب مع التطبيق', icon: 'sync_alt', ok: 'حفظ', wide: 1,
+      body: '<p class="small muted">عند انتهاء كل مرحلة في النظام يُحدَّث الطلب في التطبيق: حقل <b>status</b> (حالة الطلب لمقدمه) وحقل <b>agentStatus</b> (حالة المندوب)، مع رقم المرحلة واسمها ونسبة الإنجاز وآخر تحديث وتقرير الإنجاز وصور التنفيذ. اختر الكلمات التي يفهمها التطبيق:</p>' +
+        '<p class="tiny muted">الحالات الموجودة في التطبيق: ' + (O.status.length ? O.status.map(esc).join(' · ') : '—') + '<br>حالات المندوب الموجودة: ' + (O.agentStatus.length ? O.agentStatus.map(esc).join(' · ') : '—') + '</p>' +
+        '<datalist id="appStObs">' + O.status.map(function(v){ return '<option value="' + esc(v) + '">'; }).join('') + '</datalist><datalist id="appAgObs">' + O.agentStatus.map(function(v){ return '<option value="' + esc(v) + '">'; }).join('') + '</datalist>' +
+        '<div class="tbl-wrap"><table><thead><tr><th>في النظام</th><th>status (حالة الطلب)</th><th>agentStatus (حالة المندوب)</th></tr></thead><tbody>' +
+        ZAPP.keys.map(function(k){ return '<tr><td><b class="small">' + esc(k[1]) + '</b></td><td><input class="inp" list="appStObs" data-stk="' + esc(k[0]) + '" value="' + esc(M.status[k[0]] || '') + '"></td><td><input class="inp" list="appAgObs" data-agk="' + esc(k[0]) + '" value="' + esc(M.agent[k[0]] || '') + '"></td></tr>'; }).join('') + '</tbody></table></div>',
+      onOk: function(w){ var o = {}, g = {}; w.querySelectorAll('[data-stk]').forEach(function(i){ if (i.value.trim()) o[i.dataset.stk] = i.value.trim(); }); w.querySelectorAll('[data-agk]').forEach(function(i){ if (i.value.trim()) g[i.dataset.agk] = i.value.trim(); });
+        S.appStatusMap = o; S.appAgentMap = g; save(); toast('حُفظ ربط الحالات', 'sync_alt'); }});
   }
   setTimeout(start, 1500);
   var wReady = setInterval(function(){ if (!window.__zulfiSyncReady) return; clearInterval(wReady);
