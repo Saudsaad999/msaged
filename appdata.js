@@ -101,6 +101,19 @@
   }
   function qtyText(G){ return G.map(function(g){ return g.cat + ': ' + g.items.map(function(i){ return i.n + ' ' + i.q; }).join('، '); }).join(' · '); }
   function qtyShort(G){ var L = []; G.forEach(function(g){ g.items.forEach(function(i){ L.push(i.n + ' ' + i.q); }); }); return L.slice(0, 3).join('، ') + (L.length > 3 ? '…' : ''); }
+  function mapOf(d){
+    var a = d.mosqueAddress || d.mosque_address || d.mapUrl || d.map || '', l = d.mosqueLocation || d.location || d.geo || d.coordinates;
+    if (typeof a === 'string' && /^https?:\/\//i.test(a.trim())) return a.trim().replace(/^http:\/\//i, 'https://');
+    if (l) {
+      var lat = l.latitude != null ? l.latitude : (l._latitude != null ? l._latitude : (l.lat != null ? l.lat : null));
+      var lng = l.longitude != null ? l.longitude : (l._longitude != null ? l._longitude : (l.lng != null ? l.lng : (l.lon != null ? l.lon : null)));
+      if (lat != null && lng != null && !isNaN(+lat) && !isNaN(+lng)) return 'https://www.google.com/maps/search/?api=1&query=' + (+lat) + ',' + (+lng);
+      if (typeof l === 'string' && /-?\d+\.\d+\s*,\s*-?\d+\.\d+/.test(l)) return 'https://www.google.com/maps/search/?api=1&query=' + l.replace(/\s/g, '');
+      if (typeof l === 'string' && /^https?:\/\//i.test(l.trim())) return l.trim();
+    }
+    if (typeof a === 'string' && a.trim()) return a.trim();
+    return '';
+  }
   function th(u, w){ return typeof window.cldThumb === 'function' ? window.cldThumb(u, w) : u; }
   function allImgs(d){ var L = imgs(pick(d, F.images)); if (!L.length) Object.keys(d).forEach(function(k){ if (/image|photo|attach|pic|صور/i.test(k)) L = L.concat(imgs(d[k])); }); return L.filter(function(u, i){ return L.indexOf(u) === i; }); }
   function stTone(s){
@@ -183,7 +196,7 @@
     while (S.requests.some(function(x){ return x.id === 'APP-' + num; })) num++;
     var atts = allImgs(d).map(function(u, i){ return {id: 'F-APP-' + num + '-' + i, name: 'صورة من التطبيق ' + (i + 1), type: 'image', data: th(u, 1600)}; });
     return {id: 'APP-' + num, mosque: txt(pick(d,F.mosque)) || 'غير محدد', district: txt(pick(d,F.district)), svc: SVC_BY_COL[c.k] || 'SRV-103',
-      title: (txt(pick(d,F.title)) || c.t) + (G.length ? ' · ' + qtyShort(G) : ''), qty: G, map: (function(){ var m = txt(pick(d,F.map)); return /^https?:/.test(m) ? m : ''; })(), by: txt(pick(d,F.user)) || 'مستخدم التطبيق', byRole: 'مقدم الطلب', phone: txt(pick(d,F.phone)),
+      title: (txt(pick(d,F.title)) || c.t) + (G.length ? ' · ' + qtyShort(G) : ''), qty: G, map: mapOf(d), by: txt(pick(d,F.user)) || 'مستخدم التطبيق', byRole: 'مقدم الطلب', phone: txt(pick(d,F.phone)),
       date: dt ? dt.toISOString().slice(0,10) : today(), priority: 'متوسطة', status: 'جديدة', rep: '', opts: G.map(function(g){ return g.cat; }), note: [txt(pick(d,F.desc)), (d.notes && typeof d.notes === 'string') ? d.notes : '', G.length ? 'الكميات المطلوبة: ' + qtyText(G) : '', txt(pick(d,F.agent)) ? 'المندوب في التطبيق: ' + txt(pick(d,F.agent)) : '', txt(pick(d,F.status)) ? 'الحالة في التطبيق: ' + txt(pick(d,F.status)) : ''].filter(Boolean).join(' · '),
       atts: atts, rating: 0, notes: [{t: 'وصل من تطبيق المساجد (' + c.k + ' / ' + r.id + ')', by: by || 'النظام', at: today()}], appRef: {col: c.k, id: r.id}, fromApp: 1, appKey: 'جديدة'};
   }
@@ -200,7 +213,8 @@
     if (!window.__zulfiSyncReady || !Array.isArray(S.requests)) return;
     if (!S.appSyncFrom) { S.appSyncFrom = Date.now() - AUTO_DAYS * 864e5; }
     var from = S.appSyncFrom, added = [], fixed = 0;
-    (DATA[col] || []).forEach(function(r){ var ex = imported(col, r.id); if (!ex || ex.qty) return; var c0 = COLS.filter(function(x){ return x.k === col; })[0] || {t: col};
+    (DATA[col] || []).forEach(function(r){ var ex = imported(col, r.id); if (!ex) return; if (ex.qty && ex.map) return; if (ex.qty) { var mp0 = mapOf(r.d); if (mp0 && !ex.map) { ex.map = mp0; fixed++; } return; } var c0 = COLS.filter(function(x){ return x.k === col; })[0] || {t: col};
+      if (!ex.map) { var mp = mapOf(r.d); if (mp) ex.map = mp; }
       var G = qtyGroups(r.d, c0.t); ex.qty = G; if (G.length) { if (!(ex.opts || []).length) ex.opts = G.map(function(g){ return g.cat; }); if ((ex.note || '').indexOf('الكميات المطلوبة') < 0) ex.note = (ex.note ? ex.note + ' · ' : '') + 'الكميات المطلوبة: ' + qtyText(G); } fixed++; });
     if (fixed && !added.length) { save(); if (UI.view === 'req_view') { try { render(); } catch(e){} } }
     (DATA[col] || []).forEach(function(r){
