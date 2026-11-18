@@ -153,6 +153,7 @@
   /* ---------- تطبيق البيانات الواردة ---------- */
   function safeRender(){
     var a = document.activeElement;
+    if (a && a.id === 'msgIn') { try { render(); } catch(e){ console.error('[zulfi-sync] render', e); } try { scrollMsgs(); } catch(e){} return; }
     var typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest && a.closest('#view');
     if (typing) {
       if (pendingRender) return; pendingRender = true;
@@ -169,7 +170,8 @@
   function stamp(){
     var now = Date.now();
     Object.keys(S).forEach(function(k){ if (!canWrite(k) || !idArr(S[k])) return; var sk = seen[k] || (seen[k] = {});
-      S[k].forEach(function(e){ var j = ej(e); if (sk[e.id] !== j) { e._u = now; sk[e.id] = j; } }); });
+      S[k].forEach(function(e){ if (Array.isArray(e.msgs)) e.msgs.forEach(function(m){ if (m && typeof m === 'object' && !m.ts) m.ts = now; });
+        var j = ej(e); if (sk[e.id] !== j) { e._u = now; sk[e.id] = j; } }); });
   }
   function merge(k, R){
     var L = S[k]; if (!idArr(L) || !Array.isArray(R) || !(R.length === 0 || idArr(R))) return R;
@@ -179,8 +181,22 @@
     L.forEach(function(e){ if (!Rm[e.id] && !Bm[e.id]) out.push(e); });           /* جديد محلياً لم يُرفع بعد */
     R.forEach(function(r){ var l = Lm[r.id];
       if (!l) { if (!Bm[r.id]) out.push(r); return; }                              /* جديد من القاعدة، أو حُذف محلياً */
-      out.push((+l._u || 0) > (+r._u || 0) ? l : r); });
+      var w = (+l._u || 0) > (+r._u || 0) ? l : r, o = w === l ? r : l;
+      out.push(Array.isArray(w.msgs) && Array.isArray(o.msgs) ? joinMsgs(w, o) : w); });
     return out;
+  }
+  /* المحادثات: لا تضيع رسالة أرسلها طرف أثناء تعديل الطرف الآخر لنفس المحادثة */
+  function mkey(m){ return m && typeof m === 'object' ? (m.me ? 1 : 0) + '|' + (m.at || '') + '|' + (m.t || '') + '|' + ((m.atts || []).length) : String(m); }
+  function joinMsgs(w, o){
+    var have = {}; w.msgs.forEach(function(m){ have[mkey(m)] = 1; });
+    var extra = o.msgs.filter(function(m){ return !have[mkey(m)]; });
+    if (!extra.length) return w;
+    var c = {}; Object.keys(w).forEach(function(k){ c[k] = w[k]; });
+    c.msgs = w.msgs.concat(extra);
+    if (c.msgs.every(function(m){ return m && m.ts; })) c.msgs.sort(function(a, b){ return a.ts - b.ts; });
+    c.unread = (+w.unread || 0) + extra.filter(function(m){ return !m.me; }).length;
+    c._u = Math.max(+w._u || 0, +o._u || 0) + 1;
+    return c;
   }
   var firstLoad = true;
   function apply(map){
@@ -219,6 +235,17 @@
   }
   save = function(){ if (ready) { try { stamp(); } catch(e){} } var r = localSave.apply(this, arguments); if (ready && !pushTimer) pushTimer = setTimeout(push, 400); return r; };
   window.addEventListener('beforeunload', function(){ if (pushTimer) { clearTimeout(pushTimer); push(); } });
+
+  /* مسودة الرسالة لا تُمسح عند وصول رسالة جديدة */
+  (function(){ var _r = render; render = function(){
+    var i = document.getElementById('msgIn'), v = i ? i.value : '', f = i && document.activeElement === i, chat = typeof UI !== 'undefined' ? UI.chat : null;
+    var x = _r.apply(this, arguments);
+    var j = document.getElementById('msgIn');
+    if (j && v && !j.value && (typeof UI === 'undefined' || UI.chat === chat) && !window.__zSent) { j.value = v; }
+    if (j && f) { try { j.focus({ preventScroll: true }); } catch(e){} }
+    return x; };
+    document.addEventListener('submit', function(e){ if (e.target && e.target.id === 'composer') { window.__zSent = 1; setTimeout(function(){ window.__zSent = 0; }, 0); } }, true);
+  })();
 
   /* ---------- البدء ---------- */
   status('wait', 'يتصل بقاعدة البيانات…'); showVeil(true);
