@@ -33,11 +33,25 @@
   function placePill(){ pill.style.bottom = (window.innerWidth <= 900 && document.querySelector('.bottom-nav,#bottomNav')) ? '78px' : '12px'; }
   document.body.appendChild(pill); placePill(); window.addEventListener('resize', placePill);
 
-  var veil = document.createElement('div');
-  veil.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(245,247,249,.86);display:none;align-items:center;justify-content:center;font:600 16px "IBM Plex Sans Arabic",Tahoma,sans-serif;color:#143C54;direction:rtl;text-align:center;padding:20px';
-  veil.textContent = 'جاري تحميل البيانات من قاعدة البيانات…';
+  /* شاشة التحميل بشعار الجمعية */
+  var isDarkUI = function(){ var t = document.documentElement.dataset.theme; return t ? t === 'dark' : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches); };
+  var st = document.createElement('style');
+  st.textContent = '#zVeil{position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;flex-direction:column;gap:22px;background:#F5F7F9;direction:rtl;font-family:"IBM Plex Sans Arabic",Tahoma,sans-serif;padding:24px;text-align:center}' +
+    '#zVeil img{width:min(300px,70vw);height:auto;animation:zFade 1.6s ease-in-out infinite alternate}' +
+    '#zVeil .zs{width:46px;height:46px;border-radius:50%;border:4px solid #E2E8F0;border-top-color:#C5A976;border-left-color:#1D5271;animation:zSpin .9s linear infinite}' +
+    '#zVeil b{font-size:18px;color:#143C54;font-weight:700}#zVeil small{font-size:13px;color:#8A6F3D}' +
+    '#zVeil.dk{background:#0F1B22}#zVeil.dk b{color:#E6EEF3}#zVeil.dk small{color:#C5A976}#zVeil.dk .zs{border-color:#2B3F4B;border-top-color:#C5A976;border-left-color:#9CCCF0}' +
+    '@keyframes zSpin{to{transform:rotate(360deg)}}@keyframes zFade{from{opacity:.75}to{opacity:1}}' +
+    '@media (prefers-reduced-motion:reduce){#zVeil img,#zVeil .zs{animation:none}}';
+  document.head.appendChild(st);
+  var veil = document.createElement('div'); veil.id = 'zVeil'; veil.setAttribute('role', 'status'); veil.setAttribute('aria-label', 'جاري التحميل');
+  var logoSrc = function(){ var el = document.getElementById('logoColor'); return (el && el.src) || 'logo.png'; };
+  veil.innerHTML = '<img alt="جمعية المساجد بالزلفي"><div class="zs" aria-hidden="true"></div><small>جمعية المساجد بالزلفي · خدمتكم هدفنا</small>';
   document.body.appendChild(veil);
-  function showVeil(on){ veil.style.display = on ? 'flex' : 'none'; }
+  function showVeil(on){
+    if (on) { var dk = isDarkUI(); veil.classList.toggle('dk', dk); var im = veil.querySelector('img'); im.src = logoSrc(); im.style.filter = dk ? 'brightness(0) invert(1)' : ''; }
+    veil.style.display = on ? 'flex' : 'none';
+  }
 
   if (!CFG.apiKey || !CFG.projectId) {
     status('off', 'غير مربوط بقاعدة البيانات: أكمل firebase-config.js');
