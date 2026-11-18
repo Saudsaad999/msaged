@@ -1206,7 +1206,7 @@ document.addEventListener('input',e=>{const t=e.target;
 document.addEventListener('submit',e=>{const f=e.target;
   if(f.id==='composer'){e.preventDefault();const inp=$('#msgIn'),v=inp.value.trim();const atts=TMP.chat||[];if(!v&&!atts.length)return;const L=visibleChats();const c=L.find(x=>x.id===UI.chat)||L[0];if(!c)return;
     const isAdmin=SESSION.type==='admin';c.msgs.push({me:isAdmin?1:0,t:v,at:nowT(),atts:[...atts]});TMP.chat=[];if(!isAdmin)c.unread++;render();scrollMsgs();$('#msgIn')?.focus();
-    if(isAdmin)setTimeout(()=>{if(UI.view!=='chats')return;c.msgs.push({me:0,t:'وصلت رسالتكم، جزاكم الله خيراً. سنفيدكم بالتحديث قريباً.',at:nowT()});render();scrollMsgs()},1600)}
+    if(isAdmin)setTimeout(()=>{if(UI.view!=='chats')return;},1600)}
   else if(f.id==='profForm'){e.preventDefault();const me=repById(SESSION.id);const p=$('#pfP').value.replace(/\s/g,'');if(!/^0\d{8,9}$/.test(p)){toast('رقم الجوال غير صحيح','error');return}me.phone=p;me.email=$('#pfE').value.trim();me.zone=$('#pfZ').value.trim();logIt('تحديث البيانات الشخصية');toast('حُفظت بياناتك');render()}
   else if(f.id==='pwForm'){e.preventDefault();const me=repById(SESSION.id);const c=$('#pwC').value,n=$('#pwN').value,r=$('#pwR').value;
     if(c!==me.pw){toast('كلمة المرور الحالية غير صحيحة','error');return}if(!/^\d{4}$/.test(n)){toast('كلمة المرور 4 أرقام فقط','error');return}if(n!==r){toast('التأكيد لا يطابق كلمة المرور الجديدة','error');return}
@@ -2044,7 +2044,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act="pchF"
   else{const [k,rid]=id.split('|');const r=S.requests.find(x=>x.id===rid);if(!r)return;const th=k==='rr'?rrThread(r):adminThreadFor(r);if(!th)return;save();UI.pchF='all';UI.chat=th.id;go('chats')}},true);
 /* simulated reply from the requester */
 document.addEventListener('submit',e=>{if(e.target.id!=='composer'||SESSION.type!=='rep'||UI.view!=='chats')return;const c=S.chats.find(x=>x.id===UI.chat);if(!c||c.kind!=='rr')return;
-  setTimeout(()=>{c.msgs.push({me:1,t:'جزاكم الله خيراً، بانتظاركم.',at:nowT(),rr:1});save();if(UI.view==='chats'&&UI.chat===c.id){render();try{scrollMsgs()}catch(e){}}},1500)});
+  setTimeout(()=>{if(UI.view==='chats'&&UI.chat===c.id){render();try{scrollMsgs()}catch(e){}}},1500)});
 /* task page: both chats right at the top */
 const _ptPC=VIEWS.p_task;VIEWS.p_task=()=>{const h=_ptPC();const r=S.requests.find(x=>x.id===UI.task&&x.rep===SESSION.id);if(!r)return h;const rt=S.chats.find(c=>c.kind==='rr'&&c.req===r.id&&c.rep===r.rep),at=S.chats.find(c=>c.kind!=='rr'&&c.req===r.id&&c.with===repById(r.rep)?.name);
   const bar=`<div class="card pch-bar"><div class="card-b row" style="justify-content:space-between"><b class="small">${ic('forum')} المحادثات الخاصة بهذا الطلب</b><div class="row"><button class="btn sm pri" data-act="pchGo" data-id="adm|${r.id}">${ic('shield_person')}محادثة الإدارة${at?` <span class="num tiny">(${at.msgs.length})</span>`:''}</button><button class="btn sm gold" data-act="pchGo" data-id="rr|${r.id}">${ic('person')}محادثة مقدم الطلب${rt?` <span class="num tiny">(${rt.msgs.length})</span>`:''}</button></div></div></div>`;
