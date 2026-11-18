@@ -17,7 +17,7 @@
       order: i + 1, text: q.t || '', type: q.type || 'اختيار من متعدد', options: (q.opts || []).slice(),
       correctIndex: (typeof q.ok === 'number') ? q.ok : null, points: +q.pts || 0, seconds: +q.sec || 0 }; });
     return { id: c.id, title: c.title || '', description: c.desc || '', target: c.target || '', prize: c.prize || '', period: c.period || '',
-      status: c.status || 'مسودة', isPublished: c.status === 'منشورة', questionsCount: qs.length,
+      status: c.status || 'مسودة', hidden: !!c.hidden, isPublished: c.status === 'منشورة' && !c.hidden, questionsCount: qs.length,
       totalPoints: qs.reduce(function(a, q){ return a + q.points; }, 0), questions: qs };
   }
   var busy = false;
@@ -60,9 +60,16 @@
     var bar = '<div class="card card-b row" style="justify-content:space-between;border-color:var(--gold-line,#C5A976);background:var(--gold-soft,#FBF8F1)"><span class="small">' + ic('smartphone') +
       ' <b>مربوطة بتطبيق المساجد:</b> أي إضافة أو تعديل على المسابقات وأسئلتها يُحفظ في التطبيق تلقائياً، والمسابقة «المنشورة» فقط تظهر للمستخدمين. ومشاركات المستخدمين تصل هنا.</span><span class="tiny ' + (state.err ? '' : 'muted') + '" style="' + (state.err ? 'color:var(--bad,#BA1A1A)' : '') + '">' +
       (state.err ? esc(state.err) : (ready() ? (state.last ? 'آخر حفظ ' + state.last : 'متصل') + ' · ' + state.entries + ' مشاركة' : 'غير متصل')) + '</span></div>';
-    var i = h.indexOf('</div>', h.indexOf('class="page-head')); if (h.indexOf('class="page-head') > -1 && i > -1) { var j = h.indexOf('</div>', i + 6); return h.slice(0, j + 6) + bar + h.slice(j + 6); }
+    h = h.replace(/<button class="btn sm ghost" data-act="contestForm" data-id="([^"]+)"/g, function(m, id){
+      var c = (S.contests || []).filter(function(x){ return String(x.id) === id; })[0]; if (!c) return m;
+      return '<button class="btn sm' + (c.hidden ? ' gold' : '') + '" data-act="cmpHide" data-id="' + esc(id) + '" title="' + (c.hidden ? 'المسابقة مخفية من التطبيق' : 'إخفاء المسابقة من التطبيق دون حذفها') + '">' + ic(c.hidden ? 'visibility' : 'visibility_off') + (c.hidden ? 'إظهار في التطبيق' : 'إخفاء من التطبيق') + '</button>' + m; });
+    var i = h.indexOf('</div>', h.indexOf('class="page-head'));
+ if (h.indexOf('class="page-head') > -1 && i > -1) { var j = h.indexOf('</div>', i + 6); return h.slice(0, j + 6) + bar + h.slice(j + 6); }
     return bar + h; }; }
 
+  document.addEventListener('click', function(e){ var b = e.target.closest('[data-act="cmpHide"]'); if (!b) return; e.stopImmediatePropagation();
+    var c = (S.contests || []).filter(function(x){ return String(x.id) === b.dataset.id; })[0]; if (!c) return;
+    c.hidden = !c.hidden; save(); render(); toast(c.hidden ? 'أُخفيت المسابقة من التطبيق' : 'أصبحت المسابقة ظاهرة في التطبيق' + (c.status !== 'منشورة' ? ' بعد نشرها' : ''), c.hidden ? 'visibility_off' : 'visibility'); }, true);
   var _s = save, t = null;
   save = function(){ var r = _s.apply(this, arguments); clearTimeout(t); t = setTimeout(push, 800); return r; };
   var w = setInterval(function(){ if (!ready()) return; clearInterval(w); listen(); push(); }, 1000);
