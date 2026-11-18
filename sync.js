@@ -218,6 +218,15 @@
   }
 
   /* ---------- الحفظ: محلياً ثم إلى القاعدة ---------- */
+  /* النسخة المحلية في المتصفح مجرد نسخة احتياطية: البيانات كاملة في Firebase.
+     إذا امتلأت مساحة المتصفح تُحفظ نسخة خفيفة بدون الملفات الكبيرة، دون أي تنبيه للمستخدم */
+  var LKEY = (typeof STORE !== 'undefined') ? STORE : null, slim = false;
+  function slimmer(k, v){ return (typeof v === 'string' && v.length > 3000 && v.slice(0, 5) === 'data:') ? '' : v; }
+  if (LKEY && typeof save === 'function') save = function(){
+    if (!slim) { try { localStorage.setItem(LKEY, JSON.stringify(S)); return; } catch(e){ slim = true; } }
+    try { localStorage.setItem(LKEY, JSON.stringify(S, slimmer)); }
+    catch(e){ try { localStorage.removeItem(LKEY); } catch(x){} }
+  };
   var localSave = (typeof save === 'function') ? save : function(){};
   function push(){
     pushTimer = null; if (!adapter || !ready) return;
