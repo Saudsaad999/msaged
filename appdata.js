@@ -161,7 +161,7 @@
       L.map(function(r){ var ks = Object.keys(r.d).slice(0,4);
         return '<tr><td class="num tiny">' + esc(r.id.slice(0,14)) + '</td><td class="small">' + ks.map(function(k){ return '<span class="muted">' + esc(k) + ':</span> ' + esc(txt(r.d[k]).slice(0,50)); }).join(' · ') + '</td><td><button class="btn sm" data-act="appDoc" data-id="' + esc(r.id) + '">' + ic('visibility') + 'عرض</button></td></tr>'; }).join('') + '</tbody></table></div>';
     return head('بيانات التطبيق', 'بيانات تطبيق المساجد (مباشر)', 'تُقرأ مباشرة من قاعدة التطبيق وتتحدث لحظياً، دون أي تعديل عليها. يمكن تحويل أي طلب إلى طلب في النظام لإسناده وتنفيذه بالمراحل الخمس.',
-        '<button class="btn pri" data-act="appOpen">' + ic('download') + 'استقبال كل الطلبات المفتوحة</button><button class="btn" data-act="appSchema">' + ic('data_object') + 'نسخ هيكل الحقول</button>') +
+        '<button class="btn" data-act="appMap">' + ic('sync_alt') + 'ربط الحالات مع التطبيق</button><button class="btn pri" data-act="appOpen">' + ic('download') + 'استقبال كل الطلبات المفتوحة</button><button class="btn" data-act="appSchema">' + ic('data_object') + 'نسخ هيكل الحقول</button>') +
       '<div class="grid g3">' + [['طلبات التطبيق', reqTotal, 'assignment'], ['المستخدمون', (DATA.users || []).length, 'group'], ['الخدمات', (DATA.services || []).length, 'home_repair_service']].map(function(k){ return '<div class="card kpi"><div class="k-top"><span>' + k[0] + '</span><span class="k-ic">' + ic(k[2]) + '</span></div><div class="k-val num">' + k[1] + '</div></div>'; }).join('') + '</div>' +
       '<div class="chips">' + COLS.map(function(x){ return '<button class="chip ' + (x.k === c.k ? 'on' : '') + '" data-act="appCol" data-id="' + x.k + '">' + ic(x.i) + ' ' + esc(x.t) + ' (' + counts(x) + ')</button>'; }).join('') + '</div>' +
       '<div class="field"><input class="inp" id="appQ" placeholder="ابحث في «' + esc(c.t) + '» بأي كلمة أو رقم…" value="' + esc(UI.appQ || '') + '"></div>' + body;
@@ -185,7 +185,7 @@
     return {id: 'APP-' + num, mosque: txt(pick(d,F.mosque)) || 'غير محدد', district: txt(pick(d,F.district)), svc: SVC_BY_COL[c.k] || 'SRV-103',
       title: (txt(pick(d,F.title)) || c.t) + (G.length ? ' · ' + qtyShort(G) : ''), qty: G, map: (function(){ var m = txt(pick(d,F.map)); return /^https?:/.test(m) ? m : ''; })(), by: txt(pick(d,F.user)) || 'مستخدم التطبيق', byRole: 'مقدم الطلب', phone: txt(pick(d,F.phone)),
       date: dt ? dt.toISOString().slice(0,10) : today(), priority: 'متوسطة', status: 'جديدة', rep: '', opts: G.map(function(g){ return g.cat; }), note: [txt(pick(d,F.desc)), (d.notes && typeof d.notes === 'string') ? d.notes : '', G.length ? 'الكميات المطلوبة: ' + qtyText(G) : '', txt(pick(d,F.agent)) ? 'المندوب في التطبيق: ' + txt(pick(d,F.agent)) : '', txt(pick(d,F.status)) ? 'الحالة في التطبيق: ' + txt(pick(d,F.status)) : ''].filter(Boolean).join(' · '),
-      atts: atts, rating: 0, notes: [{t: 'وصل من تطبيق المساجد (' + c.k + ' / ' + r.id + ')', by: by || 'النظام', at: today()}], appRef: {col: c.k, id: r.id}, fromApp: 1};
+      atts: atts, rating: 0, notes: [{t: 'وصل من تطبيق المساجد (' + c.k + ' / ' + r.id + ')', by: by || 'النظام', at: today()}], appRef: {col: c.k, id: r.id}, fromApp: 1, appKey: 'جديدة'};
   }
   function importReq(r){
     var col = UI.appCol || 'maintenance_requests', exist = imported(col, r.id);
@@ -224,11 +224,12 @@
     if (n) save(); toast(n ? 'استُقبل ' + n + ' طلباً مفتوحاً من التطبيق' : 'لا توجد طلبات مفتوحة غير مستقبلة', n ? 'download_done' : 'info'); render();
   }
   document.addEventListener('click', function(e){
-    var t = e.target.closest('[data-act="appCol"],[data-act="appDoc"],[data-act="appImport"],[data-act="appSchema"],[data-act="appOpen"]'); if (!t) return;
+    var t = e.target.closest('[data-act="appCol"],[data-act="appDoc"],[data-act="appImport"],[data-act="appSchema"],[data-act="appOpen"],[data-act="appMap"]'); if (!t) return;
     e.stopImmediatePropagation(); var a = t.dataset.act;
     if (a === 'appCol') { UI.appCol = t.dataset.id; UI.appQ = ''; render(); }
     else if (a === 'appDoc') { var r = findDoc(t.dataset.id); if (r) docModal(r); }
     else if (a === 'appOpen') { importOpen(); }
+    else if (a === 'appMap') { mapModal(); }
     else if (a === 'appImport') { var r2 = findDoc(t.dataset.id); if (r2) importReq(r2); }
     else if (a === 'appSchema') {
       var out = {};
@@ -248,6 +249,52 @@
   var gi = NAV_FULL.findIndex(function(g){ return g.g === 'الطلبات والميدان'; });
   if (gi > -1) NAV_FULL[gi].items.splice(1, 0, item); else NAV_FULL.splice(1, 0, {g: 'تطبيق المساجد', items: [item]});
   try { if (typeof applyNavPerms === 'function' && STAFF.user) applyNavPerms(); } catch(e){}
+
+  /* ================= إرسال حالة الطلب من النظام إلى التطبيق ================= */
+  var SYS_ST = [['جديدة','بانتظار المراجعة'],['مقبول','قُبل وأُسند لمنفذ'],['جاري العمل','قيد التنفيذ'],['منتهي','أُغلق وسُلّم'],['مرفوض','مرفوض'],['معاد لمقدم الطلب','بحاجة لاستكمال مرفقات']];
+  var GUESS = {'جديدة':[/انتظار|جديد|pending|new/i,'في الانتظار'],'مقبول':[/قبول|مقبول|accept|assigned/i,'تم القبول'],'جاري العمل':[/تنفيذ|جاري|قيد|progress/i,'قيد التنفيذ'],
+    'منتهي':[/الانتهاء|انتهى|منته|مكتمل|complet|done/i,'تم الانتهاء'],'مرفوض':[/رفض|مرفوض|reject/i,'مرفوض'],'معاد لمقدم الطلب':[/استكمال|نواقص|معاد|return/i,'بحاجة لاستكمال']};
+  function observed(){ var set = {}; COLS.forEach(function(c){ if (!c.req) return; (DATA[c.k] || []).forEach(function(r){ var v = pick(r.d, F.status); if (typeof v === 'string' && v.trim()) set[v.trim()] = 1; }); }); return Object.keys(set); }
+  function stMap(){
+    var M = S.appStatusMap || {}, obs = observed(), out = {};
+    SYS_ST.forEach(function(x){ var k = x[0]; if (M[k]) { out[k] = M[k]; return; } var g = GUESS[k], hit = obs.filter(function(v){ return g[0].test(v); })[0]; out[k] = hit || g[1]; });
+    return out;
+  }
+  function sysKey(r){ return r.status === 'جاري العمل' || (r.status === 'مقبول' && (r.stage || 1) >= 3) ? 'جاري العمل' : r.status; }
+  var pushing = {};
+  function pushStatuses(){
+    if (!fbReady() || !window.__zulfiSyncReady || !Array.isArray(S.requests)) return;
+    var db = firebase.firestore(), M = stMap(), changed = false;
+    S.requests.forEach(function(r){
+      if (!r.appRef || !r.appRef.col || !r.appRef.id) return;
+      if (!r.appKey) r.appKey = 'جديدة';
+      var k = sysKey(r); if (k === r.appKey || pushing[r.id] === k || !M[k]) return;
+      pushing[r.id] = k;
+      var upd = { status: M[k], isReadByAdmin: true, statusUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(), statusUpdatedBy: 'لوحة التحكم' };
+      if (k === 'مرفوض' && r.reason) upd.rejectionReason = String(r.reason);
+      if (k === 'معاد لمقدم الطلب') { var lg = (r.returnedLog || []).slice(-1)[0] || r.returned || {}; upd.adminNote = [].concat(lg.needs || []).join('، ') + (lg.note ? ' · ' + lg.note : ''); }
+      if (k === 'منتهي' && r.report) upd.completionReport = String(r.report).slice(0, 2000);
+      db.collection(r.appRef.col).doc(r.appRef.id).update(upd).then(function(){
+        r.appKey = k; delete pushing[r.id]; r.notes = r.notes || []; r.notes.push({t: 'حُدّثت حالة الطلب في تطبيق المساجد إلى «' + M[k] + '»', by: 'النظام', at: today()}); _saveAD();
+      }).catch(function(err){
+        delete pushing[r.id]; console.warn('[app-data] status push', r.appRef, err && err.code);
+        try { toast(/permission/i.test(String(err && (err.code || err.message))) ? 'القاعدة ترفض تعديل حالة الطلب في التطبيق: راجع قواعد الأمان' : 'تعذر تحديث الحالة في التطبيق', 'sync_problem'); } catch(e){}
+      });
+      changed = true;
+    });
+  }
+  var _saveAD = save, pT = null;
+  save = function(){ var r = _saveAD.apply(this, arguments); clearTimeout(pT); pT = setTimeout(pushStatuses, 600); return r; };
+  setInterval(pushStatuses, 15000);
+  function mapModal(){
+    var M = stMap(), obs = observed();
+    var w = modal({title: 'ربط حالات الطلب مع التطبيق', icon: 'sync_alt', ok: 'حفظ', wide: 1,
+      body: '<p class="small muted">عند تغيّر حالة الطلب في النظام تُكتب في حقل <b>status</b> للطلب في التطبيق بالقيمة المحددة هنا، فيراها مقدم الطلب. القيم المقترحة مأخوذة من الحالات الموجودة فعلاً في التطبيق.</p>' +
+        (obs.length ? '<p class="tiny muted">الحالات الموجودة في التطبيق: ' + obs.map(esc).join(' · ') + '</p>' : '') +
+        '<datalist id="appStObs">' + obs.map(function(v){ return '<option value="' + esc(v) + '">'; }).join('') + '</datalist>' +
+        SYS_ST.map(function(x){ return '<div class="grid g2" style="align-items:center"><div><b class="small">' + esc(x[0]) + '</b><div class="tiny muted">' + esc(x[1]) + '</div></div><input class="inp" list="appStObs" data-stk="' + esc(x[0]) + '" value="' + esc(M[x[0]] || '') + '"></div>'; }).join(''),
+      onOk: function(w){ var o = {}; w.querySelectorAll('[data-stk]').forEach(function(i){ if (i.value.trim()) o[i.dataset.stk] = i.value.trim(); }); S.appStatusMap = o; save(); toast('حُفظ ربط الحالات', 'sync_alt'); }});
+  }
   setTimeout(start, 1500);
   var wReady = setInterval(function(){ if (!window.__zulfiSyncReady) return; clearInterval(wReady);
     COLS.forEach(function(c){ if (c.req && STATE[c.k] === 'ok') { try { autoImport(c.k); } catch(e){} } }); }, 1000);
