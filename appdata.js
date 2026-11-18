@@ -25,7 +25,7 @@
     {k:'admin_settings', t:'إعدادات الإدارة', i:'admin_panel_settings'},
     {k:'panel', t:'panel', i:'dashboard'}
   ];
-  var DATA = {};        /* col -> [{id, d}] */
+  var DATA = {}; window.ZAPPDATA = DATA;        /* col -> [{id, d}] */
   var STATE = {};       /* col -> 'loading' | 'ok' | 'denied' | 'error' */
   var started = false;
 
