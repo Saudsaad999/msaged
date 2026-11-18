@@ -103,7 +103,7 @@
   function qtyShort(G){ var L = []; G.forEach(function(g){ g.items.forEach(function(i){ L.push(i.n + ' ' + i.q); }); }); return L.slice(0, 3).join('، ') + (L.length > 3 ? '…' : ''); }
   function mapOf(d){
     var a = d.mosqueAddress || d.mosque_address || d.mapUrl || d.map || '', l = d.mosqueLocation || d.location || d.geo || d.coordinates;
-    if (typeof a === 'string' && /^https?:\/\//i.test(a.trim())) return a.trim().replace(/^http:\/\//i, 'https://');
+    if (typeof a === 'string' && /^https?:\/\//i.test(a.trim())) { var u0 = a.trim(); try { if (typeof mapCoords === 'function' && mapCoords(u0)) return mapLink(u0); } catch(e){} return u0.replace(/^http:\/\//i, 'https://'); }
     if (l) {
       var lat = l.latitude != null ? l.latitude : (l._latitude != null ? l._latitude : (l.lat != null ? l.lat : null));
       var lng = l.longitude != null ? l.longitude : (l._longitude != null ? l._longitude : (l.lng != null ? l.lng : (l.lon != null ? l.lon : null)));
