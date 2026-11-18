@@ -2650,15 +2650,20 @@ if(VIEWS.req_view){const _rvQ=VIEWS.req_view;VIEWS.req_view=function(){const h=_
 if(VIEWS.p_task){const _ptQ=VIEWS.p_task;VIEWS.p_task=function(){const h=_ptQ.apply(this,arguments);try{return qtyInject(h,S.requests.find(x=>x.id===UI.task))}catch(e){return h}}}
 
 /* ================= موقع المسجد على خرائط Google داخل صفحة الطلب ================= */
-function mapCoords(u){if(!u)return null;u=String(u);let m=u.match(/[?&](?:q|query|ll|destination)=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/)||u.match(/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/)||u.match(/^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/);return m?{lat:+m[1],lng:+m[2]}:null}
+function mapCoords(u){if(!u)return null;u=String(u);const P=[/[?&](?:q|query|ll|destination|center)=(-?\d{1,2}\.\d+)\s*(?:,|%2C)\s*(-?\d{1,3}\.\d+)/i,/[?&]mlat=(-?\d{1,2}\.\d+)&(?:amp;)?mlon=(-?\d{1,3}\.\d+)/i,/#map=\d+(?:\.\d+)?\/(-?\d{1,2}\.\d+)\/(-?\d{1,3}\.\d+)/,/[?&]lat=(-?\d{1,2}\.\d+)&(?:amp;)?(?:lng|lon)=(-?\d{1,3}\.\d+)/i,/geo:(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/i,/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/,/^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/];
+  for(const re of P){const m=u.match(re);if(m)return{lat:+m[1],lng:+m[2]}}return null}
 function mapLink(u){if(!u)return '';const c=mapCoords(u);if(c)return `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}`;if(/^https?:\/\//i.test(u))return u.replace(/^http:\/\//i,'https://');return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(u)}`}
 function mapBoxHTML(r){if(!r||!r.map)return '';const c=mapCoords(r.map),link=mapLink(r.map),q=c?`${c.lat},${c.lng}`:(/^https?:/i.test(r.map)?'':r.map);
   const emb=q?`<iframe class="mapx-f" title="موقع المسجد على الخريطة" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=16&hl=ar&output=embed"></iframe>`:'';
   return `<div class="mapx">${emb}<div class="mapx-b"><span class="small">${ic('location_on',1)} <b>موقع المسجد</b>${c?` <span class="tiny muted num" dir="ltr">${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</span>`:''}</span><div class="row"><a class="btn sm pri" href="${esc(link)}" target="_blank" rel="noopener">${ic('map')}فتح في خرائط Google</a>${c?`<a class="btn sm" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}" target="_blank" rel="noopener">${ic('directions')}الاتجاهات</a>`:''}</div></div></div>`}
-function mapInject(h,r){if(!r||!r.map||h.indexOf('class="mapx"')>-1)return h;const box=mapBoxHTML(r);if(!box)return h;
+function mapInject(h,r){if(!r||!r.map||h.indexOf('class="mapx"')>-1)return h;const box=mapBoxHTML(r);if(!box)return h;const gl=mapLink(r.map);if(gl&&gl!==r.map){h=h.split('href="'+esc(r.map)+'"').join('href="'+esc(gl)+'"').split('href="'+r.map+'"').join('href="'+esc(gl)+'"')}
   const marks=['<div class="qty-box"','<div class="info-tile"><span class="tiny muted">وصف الطلب','<div class="field"><label>وصف الطلب'];let k=-1;marks.forEach(m=>{const i=h.indexOf(m);if(i>-1&&(k<0||i<k))k=i});return k<0?h:h.slice(0,k)+box+h.slice(k)}
 if(VIEWS.req_view){const _rvM=VIEWS.req_view;VIEWS.req_view=function(){const h=_rvM.apply(this,arguments);try{return mapInject(h,S.requests.find(x=>x.id===UI.rv))}catch(e){return h}}}
 if(VIEWS.p_task){const _ptM=VIEWS.p_task;VIEWS.p_task=function(){const h=_ptM.apply(this,arguments);try{return mapInject(h,S.requests.find(x=>x.id===UI.task))}catch(e){return h}}}
+/* توحيد روابط المواقع: أي رابط خريطة آخر (مثل OpenStreetMap) يتحول إلى رابط خرائط Google */
+function mapNormalizeAll(){let n=0;(S.requests||[]).forEach(r=>{if(!r||!r.map||/google\.[a-z.]+\/maps|maps\.google\./i.test(r.map))return;const c=mapCoords(r.map);if(!c)return;r.map=mapLink(r.map);n++});if(n){try{save()}catch(e){}}return n}
+try{mapNormalizeAll()}catch(e){}
+setInterval(()=>{try{if(mapNormalizeAll()&&['req_view','p_task'].includes(UI.view))render()}catch(e){}},6000);
 
 /* ================= التواريخ: تُفتح بتقويم عند الضغط على الخانة ويُختار منه التاريخ ================= */
 const DP_SEL='input[type=date],input[type=datetime-local],input[type=month],input[type=time]';
