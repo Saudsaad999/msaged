@@ -23,11 +23,10 @@
   /* ---------- مؤشر الاتصال ---------- */
   var pill = document.createElement('div');
   pill.id = 'dbPill';
-  pill.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9999;font:600 12px "IBM Plex Sans Arabic",Tahoma,sans-serif;padding:6px 12px;border-radius:999px;display:flex;gap:6px;align-items:center;box-shadow:0 4px 14px rgba(20,60,84,.18);direction:rtl;cursor:default';
+  pill.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9999;width:14px;height:14px;padding:0;border-radius:50%;display:block;box-shadow:0 0 0 3px rgba(255,255,255,.9),0 2px 8px rgba(20,60,84,.25);cursor:help';
   function status(kind, text){
     var c = {ok:['#E3F3EA','#1F6B45'], wait:['#F3ECDD','#8A6F3D'], off:['#ECEFF2','#5B7383'], err:['#FFDAD6','#93000A']}[kind] || ['#ECEFF2','#5B7383'];
-    pill.style.background = c[0]; pill.style.color = c[1];
-    pill.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:' + c[1] + '"></span>' + text;
+    pill.innerHTML = ''; pill.style.background = c[1]; pill.setAttribute('role', 'status'); pill.setAttribute('aria-label', text);
     pill.title = text;
   }
   function placePill(){ pill.style.bottom = (window.innerWidth <= 900 && document.querySelector('.bottom-nav,#bottomNav')) ? '78px' : '12px'; }
