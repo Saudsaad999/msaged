@@ -226,7 +226,7 @@
   function thread(gk, G){
     var r0 = G[0], L = groupMsgs(G), msgs;
     if (L) msgs = L.map(function(m){ var x = sender(m), lab = x.s === 'staff' ? staffLabel(x) : x.s === 'user' ? 'المستخدم: ' + x.n : 'المندوب: ' + x.n;
-      return {me: x.s === 'staff' ? 1 : 0, label: lab, t: m.text, at: atT(m.t), atts: attsOf(m)}; });
+      return {me: x.s === 'user' ? 0 : 1, label: lab, t: m.text, at: atT(m.t), atts: attsOf(m)}; });
     else { var lt = txt(pick(r0.d, F.last)); msgs = lt ? [{me: 0, t: lt, at: atT(pick(r0.d, F.lastT)), atts: []}] : []; }
     var ph = phoneOf(r0), un = G.filter(function(r){ return unread(r); }).length;
     var info = [ph, G.length > 1 ? G.length + ' محادثات' : '', txt(pick(r0.d, F.mosque)), txt(r0.d.requestType), r0.d.driverName && r0.col !== 'driverAdminChats' ? 'المندوب: ' + txt(r0.d.driverName) : '', r0.d.lastOrderId ? 'طلب ' + txt(r0.d.lastOrderId) : ''].filter(Boolean).join(' · ');
@@ -244,7 +244,7 @@
     var mine = myName(), gk = r ? gkey(r) : '', G = r ? (GROUPS[gk] || [r]) : [], L = r ? groupMsgs(G) : null, msgs;
     if (L) msgs = L.map(function(m){ var x = sender(m), own = x.s === 'rep' && x.n === mine;
       var lab = own ? '' : x.s === 'staff' ? staffLabel(x) : x.s === 'user' ? 'المستخدم: ' + x.n : 'المندوب: ' + x.n;
-      return {me: own ? 0 : 1, label: lab, t: m.text, at: atT(m.t), atts: attsOf(m)}; });
+      return {me: x.s === 'user' ? 1 : 0, label: lab, t: m.text, at: atT(m.t), atts: attsOf(m)}; });
     else { var lt = r ? txt(pick(r.d, F.last)) : ''; msgs = lt ? [{me: 1, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
     var id = r ? tid(gk, req.id) : PFX + 'conversations|new@' + req.id; if (r) TARGET[id] = r;
     return {id: id, _app: 1, _t: r ? Math.max.apply(null, G.map(lastMs)) : 0, _new: r ? 0 : 1, kind: 'rr', with: (r && title(r)) || req.by || 'مقدم الطلب',
