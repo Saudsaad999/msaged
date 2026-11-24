@@ -283,10 +283,22 @@
     var r = byTid(UI.chat), i = document.getElementById('msgIn'), v = (i && i.value || '').trim();
     var reqId = String(UI.chat).split('@')[1], req = reqId ? (S.requests || []).filter(function(x){ return x.id === reqId; })[0] : null;
     if (!r && !(PORTAL && req && isAppReq(req))) { toast('المحادثة غير موجودة في التطبيق', 'error'); return; }
-    var atts = (TMP.chat || []).filter(function(a){ return a && /^https:\/\//.test(a.data || ''); });
-    if (atts.length) v = (v ? v + '\n' : '') + atts.map(function(a){ return a.data; }).join('\n');
-    TMP.chat = [];
-    if (!v) return;
+    var pend = (TMP.chat || []).filter(function(a){ return a && typeof a.data === 'string'; });
+    if (!v && !pend.length) return;
+    if (pend.length) {
+      var up = window.zulfiCloudUpload || function(o){ return /^https:/.test(o.data) ? Promise.resolve(o) : Promise.reject(new Error('Cloudinary غير مفعّل')); };
+      i.disabled = true; toast('جاري رفع المرفقات…', 'cloud_upload');
+      Promise.all(pend.map(function(o){ return up(o); })).then(function(L){
+        TMP.chat = []; i.disabled = false; var pa = document.getElementById('pendAtt'); if (pa) pa.innerHTML = '';
+        var parts = L.map(function(o){ return o.data; }); if (v) parts.push(v);
+        i.value = '';
+        if (!r) { i.value = parts.join('\n'); document.getElementById('composer').requestSubmit(); return; }
+        /* كل مرفق في رسالة مستقلة (رابطه فقط) حتى يظهر كصورة أو ملف، ثم النص */
+        parts.reduce(function(pr, x){ return pr.then(function(){ return whenLoaded(r).then(function(){ return send(r, x); }); }); }, Promise.resolve())
+          .then(function(){ toast('أُرسلت المرفقات', 'send'); }).catch(function(err){ console.warn('[app-chats] send', err); toast('تعذر إرسال المرفق إلى التطبيق', 'error'); });
+      }).catch(function(err){ i.disabled = false; toast('تعذر رفع المرفق، فلم يُرسل: ' + (window.zulfiCloudWhy ? zulfiCloudWhy(err) : (err && err.message)), 'cloud_off'); });
+      return;
+    }
     if (!r) { i.value = ''; i.disabled = true; createConv(req, v).then(function(){ i.disabled = false; toast('أُرسلت رسالتك لمقدم الطلب في التطبيق', 'send'); })
       .catch(function(err){ i.disabled = false; i.value = v; console.warn('[app-chats] create', err); toast('تعذر إرسال الرسالة إلى التطبيق', 'error'); }); return; }
     var M = MODE[r.col + '/' + r.id] || {};
