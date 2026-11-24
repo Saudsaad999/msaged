@@ -2020,7 +2020,7 @@ if(IS_PORTAL){
 const RR_OPEN=['مرفوض'];
 function rrThread(r){let t=S.chats.find(c=>c.kind==='rr'&&c.req===r.id&&c.rep===r.rep);
   if(!t){t={id:'RQ-'+r.id+'-'+r.rep,kind:'rr',with:r.by||'مقدم الطلب',role:r.byRole||'مقدم الطلب',req:r.id,rep:r.rep,unread:0,msgs:[]};
-    if(r.status!=='منتهي')t.msgs.push({me:1,t:`السلام عليكم، أنا ${r.by||'مقدم الطلب'} (${r.byRole||'مقدم الطلب'}) بخصوص طلب «${r.title}» في ${r.mosque}. متى يمكنكم الحضور؟`,at:'09:10',rr:1});
+    
     S.chats.push(t)}return t}
 function adminThreadFor(r){try{return lateThread(r)}catch(e){return null}}
 function rrEnsure(){if(SESSION.type!=='rep')return;let ch=0;myTasks().filter(r=>!RR_OPEN.includes(r.status)).forEach(r=>{if(!S.chats.some(c=>c.kind==='rr'&&c.req===r.id&&c.rep===r.rep)){rrThread(r);ch=1}});if(ch)save()}
