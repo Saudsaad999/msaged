@@ -4346,6 +4346,7 @@ if(VIEWS.dn_home){const _dnhPL=VIEWS.dn_home;VIEWS.dn_home=function(){const h=_d
   const isPlan=e=>{const x=(e.querySelector('.card-h h2,.card-h b,h2')?.textContent||'');return x.includes('خطط الجمعية لتنفيذ دعمكم')||x.includes('المشاريع المدعومة ونسبة إنجازها')};
   const plans=kids.filter(e=>e.classList.contains('card')&&isPlan(e));if(!plans.length)return h;
   const anchor=kids.find(e=>!e.classList.contains('page-head')&&!e.classList.contains('psearch'));if(!anchor)return h;
+  const hero=kids.find(e=>e.classList.contains('dn-hero'));if(hero&&!plans.includes(hero)){t.content.insertBefore(hero,anchor);const after=hero.nextSibling;plans.forEach(p=>{p.classList.add('dn-plan-top');t.content.insertBefore(p,after)});return t.innerHTML}
   plans.forEach(p=>{p.classList.add('dn-plan-top');t.content.insertBefore(p,anchor)});return t.innerHTML}catch(e){return h}}}
 
 /* ================= صفحة الدخول: أسماء التبويبات بدون كلمة «دخول» ================= */
@@ -4504,5 +4505,7 @@ try{if(typeof SESSION!=='undefined'){SESSION.type='admin';SESSION.id=null}if(typ
 <script src="appcontent.js"></script>
 <script src="appchats.js"></script>
 <script src="chatby.js"></script>
+<script src="donorx.js"></script>
+<script src="stamp.js"></script>
+<script src="bookflow.js"></script>
 </body></html>
-
