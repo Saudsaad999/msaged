@@ -33,19 +33,26 @@
         c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', 0.85)); } catch(e){ res(dataUrl); } };
       im.onerror = function(){ res(dataUrl); }; im.src = dataUrl; });
   }
-  function post(dataUrl, name, extra){
+  function post(dataUrl, name, extra, rtype){
     var fd = new FormData();
     fd.append('file', dataUrl);
     fd.append('upload_preset', C.uploadPreset);
     if (extra) { fd.append('folder', (C.folder || 'zulfi') + '/' + APP); if (name) fd.append('context', 'caption=' + String(name).replace(/[|=]/g, ' ').slice(0, 120)); }
-    return fetch('https://api.cloudinary.com/v1_1/' + encodeURIComponent(C.cloudName) + '/image/upload', { method: 'POST', body: fd })
+    return fetch('https://api.cloudinary.com/v1_1/' + encodeURIComponent(C.cloudName) + '/' + (rtype || 'image') + '/upload', { method: 'POST', body: fd })
       .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if (!r.ok || !j.secure_url) { var e = new Error((j.error && j.error.message) || ('HTTP ' + r.status)); e.status = r.status; throw e; } return j; }); });
   }
   function upload(dataUrl, name){
-    return shrink(dataUrl).then(function(d){
-      return post(d, name, true).catch(function(e){ if (e.status === 400 && !/preset/i.test(e.message)) return post(d, name, false); throw e; });
+    var img = dataUrl.indexOf('data:image') === 0, rt = img ? 'image' : 'auto';
+    return (img ? shrink(dataUrl) : Promise.resolve(dataUrl)).then(function(d){
+      return post(d, name, true, rt).catch(function(e){ if (e.status === 400 && !/preset/i.test(e.message)) return post(d, name, false, rt); throw e; });
     });
   }
+  /* رفع أي مرفق (صورة أو PDF أو ملف) وإرجاعه برابط https */
+  window.zulfiCloudUpload = function(o){
+    if (!o || typeof o.data !== 'string' || o.data.indexOf('data:') !== 0) return Promise.resolve(o);
+    return upload(o.data, o.name).then(function(j){ o.data = j.secure_url; o.cloud = {id: j.public_id, bytes: j.bytes}; return o; });
+  };
+  window.zulfiCloudWhy = function(e){ return why(e); };
   /* شرح سبب الفشل بالعربي */
   function why(e){ var m = String(e && e.message || e || '');
     if (/preset not found|Upload preset.*not found/i.test(m)) return 'لا يوجد في Cloudinary إعداد رفع باسم «' + C.uploadPreset + '». أنشئه من Settings ← Upload ← Upload presets';
@@ -60,14 +67,14 @@
   var _readFile = readFile;
   readFile = function(f){
     return _readFile.apply(this, arguments).then(function(o){
-      if (!o || o.type !== 'image' || typeof o.data !== 'string' || o.data.indexOf('data:image') !== 0) return o;
-      busy++; if (busy === 1) try { toast('جاري رفع الصور إلى Cloudinary…', 'cloud_upload'); } catch(e){}
+      if (!o || typeof o.data !== 'string' || o.data.indexOf('data:') !== 0) return o;
+      busy++; if (busy === 1) try { toast(o.type === 'image' ? 'جاري رفع الصور إلى Cloudinary…' : 'جاري رفع الملف إلى Cloudinary…', 'cloud_upload'); } catch(e){}
       return upload(o.data, o.name).then(function(j){
         o.data = j.secure_url; o.cloud = { id: j.public_id, w: j.width, h: j.height, bytes: j.bytes };
         return o;
       }).catch(function(err){
         console.warn('[cloudinary] تعذر الرفع، حُفظت الصورة محلياً', err);
-        try { toast('تعذر رفع الصورة إلى Cloudinary (' + why(err) + ')، حُفظت داخل النظام', 'cloud_off'); } catch(e){}
+        try { toast('تعذر رفع ' + (o.type === 'image' ? 'الصورة' : 'الملف') + ' إلى Cloudinary (' + why(err) + ')، حُفظ داخل النظام', 'cloud_off'); } catch(e){}
         return o;
       }).then(function(o2){ busy--; return o2; });
     });
