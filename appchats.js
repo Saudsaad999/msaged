@@ -137,6 +137,8 @@
       else o[k] = v; });
     if (!hasText) o.text = text; if (!hasTime) o.timestamp = now;
     o.sentFrom = 'لوحة التحكم';
+    var u = window.zulfiWho ? window.zulfiWho() : null;
+    if (u) { o.sentByName = u.n || ''; o.sentByRole = u.r || ''; if (typeof o.senderName === 'string' && u.n) o.senderName = u.n; }
     return {msg: o, guessed: T.guessed};
   }
   function send(r, text){
@@ -168,7 +170,7 @@
     return d.toDateString() === now.toDateString() ? t : d.toISOString().slice(5, 10).replace('-', '/') + ' ' + t; }
   function thread(r){
     var L = MSGS[r.col + '/' + r.id], msgs;
-    if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
+    if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, byName: m.admin ? (m.raw.sentByName || '') : '', byRole: m.admin ? (m.raw.sentByRole || '') : '', t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
     else { var lt = txt(pick(r.d, F.last)); msgs = lt ? [{me: 0, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
     var info = [txt(pick(r.d, F.phone)), txt(pick(r.d, F.mosque))].filter(Boolean).join(' · ');
     return {id: tid(r), _app: 1, req: '', with: title(r), kind: (r.col === 'driverAdminChats' ? 'مندوب (من التطبيق)' : 'مستخدم التطبيق') + (info ? ' · ' + info : ''), unread: unread(r) ? (typeof pick(r.d, F.adminUnread) === 'number' ? pick(r.d, F.adminUnread) : 1) : 0, msgs: msgs};
