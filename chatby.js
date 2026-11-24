@@ -26,7 +26,8 @@
   save = function(){
     var u = who();
     if (u && (u.n || u.r)) (S.chats || []).forEach(function(c){ if (!c || c._app || !Array.isArray(c.msgs)) return; var k = known[c.id] || 0;
-      for (var i = k; i < c.msgs.length; i++) { var m = c.msgs[i]; if (m && m.me && !m.ts && !m.byName && !m.byRole) { m.byName = u.n; m.byRole = u.r; } }
+      var rrP = c.kind === 'rr' && typeof IS_PORTAL !== 'undefined' && IS_PORTAL;   /* في محادثة مقدم الطلب بالبوابة me:1 = مقدم الطلب */
+      for (var i = k; i < c.msgs.length; i++) { var m = c.msgs[i]; if (m && m.me && !rrP && !m.ts && !m.byName && !m.byRole) { m.byName = u.n; m.byRole = u.r; } }
       known[c.id] = c.msgs.length; });
     return _s.apply(this, arguments);
   };
@@ -40,8 +41,10 @@
     var els = box.querySelectorAll('.msg'); if (els.length !== t.msgs.length) return;
     for (var i = 0; i < els.length; i++) { var m = t.msgs[i], el = els[i]; if (!m || el.getAttribute('data-by')) continue;
       var L = m.label || (m.me ? label(m) : ''); if (!L) continue;
+      var rrv = t.kind === 'rr' && !t._app && m.me && !m.label && typeof IS_PORTAL !== 'undefined' && IS_PORTAL;
+      if (rrv) { L = 'الإدارة: ' + L; }
       el.setAttribute('data-by', '1');
-      if (m.label) { var sm = el.querySelector('small'); if (sm) sm.textContent = m.at || ''; }
+      if (m.label || rrv) { var sm = el.querySelector('small'); if (sm) sm.textContent = m.at || ''; }
       var d = document.createElement('div'); d.className = 'msg-by'; d.textContent = L; el.insertBefore(d, el.firstChild); }
   }
   if (typeof render === 'function') { var _r = render; render = function(){ var x = _r.apply(this, arguments); try { decorate(); } catch(e){} return x; }; }
