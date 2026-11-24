@@ -238,9 +238,9 @@
     var str = JSON.stringify(out, null, 1);
     modal({title: 'هيكل محادثات التطبيق', icon: 'data_object', wide: 1, ok: 'إغلاق', onOk: function(){}, body: '<p class="small muted">انسخ النص وأرسله للمطور.</p><textarea class="inp" style="height:50vh;direction:ltr" readonly>' + esc(str) + '</textarea>'});
   };
-  if (VIEWS.chats) { var _vc = VIEWS.chats; VIEWS.chats = function(){ var h = _vc.apply(this, arguments);
-    if (!(SESSION && SESSION.type === 'admin') || (typeof STAFF !== 'undefined' && STAFF.user && typeof isBoard === 'function' && isBoard())) return h;
-    return h.replace('<button class="btn sm" data-act="chatNew"', '<button class="btn sm ghost" onclick="zulfiChatSchema()" title="هيكل محادثات التطبيق للمطور">' + ic('data_object') + '</button><button class="btn sm" data-act="chatNew"'); }; }
+  /* زر نصي في صفحة «بيانات التطبيق (مباشر)» بدل مركز المحادثات */
+  if (VIEWS.app_live) { var _vl = VIEWS.app_live; VIEWS.app_live = function(){ var h = _vl.apply(this, arguments);
+    return h.replace('<button class="btn" data-act="appSchema">', '<button class="btn" onclick="zulfiChatSchema()">' + ic('forum') + 'هيكل المحادثات</button><button class="btn" data-act="appSchema">'); }; }
 
   var w = setInterval(function(){ if (!ready()) return; clearInterval(w); start(); }, 1000);
   document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') openCur(); });
