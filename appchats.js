@@ -158,124 +158,88 @@
     if (Object.keys(up).length) r.ref.update(up).catch(function(e){ console.warn('[app-chats] read', e && e.code); });
   }
 
-  /* ---------- الصفحة ---------- */
-  function title(r){ return txt(pick(r.d, F.name)) || txt(pick(r.d, F.phone)) || ('محادثة ' + r.id.slice(0, 6)); }
-  function cur(){ var L = DATA[UI.acCol || 'conversations'] || []; return L.filter(function(r){ return r.id === UI.acId; })[0]; }
-  function listHTML(){
-    var col = UI.acCol || 'conversations', L = DATA[col] || [], q = (UI.acQ || '').trim();
-    if (q) L = L.filter(function(r){ return (title(r) + JSON.stringify(r.d)).indexOf(q) > -1; });
-    if (STATE[col] === 'denied') return '<div class="empty small">' + ic('lock') + ' القاعدة ترفض قراءة «' + esc(col) + '»</div>';
-    if (STATE[col] !== 'ok') return '<div class="empty small">' + ic('hourglass_top') + ' جاري التحميل…</div>';
-    if (!L.length) return '<div class="empty small">لا توجد محادثات.</div>';
-    return L.map(function(r){ var u = unread(r), on = r.id === UI.acId;
-      return '<button class="ac-item' + (on ? ' on' : '') + '" data-act="acOpen" data-id="' + esc(r.id) + '"><span class="ac-av">' + ic('person') + '</span><span class="ac-tx"><b>' + esc(title(r)) + '</b>' +
-        '<span class="tiny muted">' + esc(lastText(r).slice(0, 60)) + '</span></span><span class="ac-meta"><span class="tiny muted num">' + esc(fmtT(lastMs(r))) + '</span>' + (u ? '<span class="badge num">' + (u > 1 ? u : '•') + '</span>' : '') + '</span></button>'; }).join('');
+  /* ---------- دمج محادثات التطبيق داخل «مركز المحادثات» ---------- */
+  var PFX = 'AP~';
+  function tid(r){ return PFX + r.col + '~' + r.id; }
+  function byTid(id){ if (!id || id.indexOf(PFX) !== 0) return null; var p = id.slice(PFX.length).split('~'); var col = p[0], did = p.slice(1).join('~');
+    return (DATA[col] || []).filter(function(r){ return r.id === did; })[0] || null; }
+  function title(r){ return txt(pick(r.d, F.name)) || txt(pick(r.d, F.phone)) || ('مستخدم التطبيق ' + r.id.slice(0, 5)); }
+  function atT(v){ var d = toDate(v); if (!d) return ''; var now = new Date(); var t = (d.getHours() % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + (d.getHours() < 12 ? 'ص' : 'م');
+    return d.toDateString() === now.toDateString() ? t : d.toISOString().slice(5, 10).replace('-', '/') + ' ' + t; }
+  function thread(r){
+    var L = MSGS[r.col + '/' + r.id], msgs;
+    if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
+    else { var lt = txt(pick(r.d, F.last)); msgs = lt ? [{me: 0, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
+    var info = [txt(pick(r.d, F.phone)), txt(pick(r.d, F.mosque))].filter(Boolean).join(' · ');
+    return {id: tid(r), _app: 1, req: '', with: title(r), kind: (r.col === 'driverAdminChats' ? 'مندوب (من التطبيق)' : 'مستخدم التطبيق') + (info ? ' · ' + info : ''), unread: unread(r) ? (typeof pick(r.d, F.adminUnread) === 'number' ? pick(r.d, F.adminUnread) : 1) : 0, msgs: msgs};
   }
-  function msgsHTML(r){
-    if (!r) return '<div class="empty small">' + ic('forum') + ' اختر محادثة من القائمة</div>';
-    var L = MSGS[r.col + '/' + r.id];
-    if (!L) return '<div class="empty small">' + ic('hourglass_top') + ' جاري تحميل الرسائل…</div>';
-    if (!L.length) return '<div class="empty small">لا توجد رسائل في هذه المحادثة بعد.</div>';
-    return L.map(function(m){ return '<div class="ac-msg ' + (m.admin ? 'me' : 'them') + '">' +
-      (m.file ? '<a href="' + esc(m.file) + '" target="_blank" rel="noopener"><img src="' + esc(m.file) + '" alt="مرفق" loading="lazy"></a>' : '') +
-      (m.text ? '<div>' + esc(m.text) + '</div>' : '') + '<span class="tiny">' + esc(fmtT(m.t)) + '</span></div>'; }).join('');
+  var lastSig = '';
+  function inject(force){
+    if (!Array.isArray(S.chats)) return false;
+    var A = []; CH.forEach(function(c){ (DATA[c.k] || []).forEach(function(r){ A.push(r); }); });
+    A.sort(function(a, b){ return lastMs(b) - lastMs(a); });
+    var T = A.map(thread), sig = JSON.stringify(T);
+    var has = S.chats.some(function(c){ return c && c._app; });
+    if (!force && sig === lastSig && has === (T.length > 0) && S.chats.filter(function(c){ return c && c._app; }).length === T.length) return false;
+    lastSig = sig;
+    var keep = S.chats.filter(function(c){ return !(c && c._app); });
+    S.chats.length = 0; Array.prototype.push.apply(S.chats, T.concat(keep));
+    return true;
   }
-  VIEWS.app_chats = function(){
-    start(); var col = UI.acCol || 'conversations', r = cur();
-    if (r) { openSub(r); }
-    var tabs = CH.map(function(c){ var n = (DATA[c.k] || []).filter(unread).length;
-      return '<button class="chip ' + (c.k === col ? 'on' : '') + '" data-act="acCol" data-id="' + c.k + '">' + ic(c.i) + ' ' + esc(c.t) + ' (' + (STATE[c.k] === 'ok' ? (DATA[c.k] || []).length : '…') + ')' + (n ? ' <span class="badge num">' + n + '</span>' : '') + '</button>'; }).join('');
-    var headH = head('تطبيق المساجد', 'محادثات التطبيق', 'رسائل المستخدمين والمناديب من التطبيق تصل هنا لحظياً، وردّك يصلهم في التطبيق مباشرة.', '<button class="btn" data-act="acSchema">' + ic('data_object') + 'نسخ هيكل المحادثات</button>');
-    if (!window.firebase || !firebase.apps || !firebase.apps.length) return headH + '<div class="card empty">' + ic('cloud_off') + ' النظام غير متصل بقاعدة البيانات.</div>';
-    var pane = r ? '<div class="ac-top"><button class="btn sm ghost ac-back" data-act="acBack">' + ic('arrow_forward') + '</button><div><b>' + esc(title(r)) + '</b><div class="tiny muted num">' +
-        esc([txt(pick(r.d, F.phone)), txt(pick(r.d, F.mosque))].filter(Boolean).join(' · ')) + '</div></div></div>' +
-        '<div class="ac-msgs" id="acMsgs">' + msgsHTML(r) + '</div>' +
-        '<form class="ac-form" id="acForm"><input class="inp" id="acIn" placeholder="اكتب ردك…" autocomplete="off"><button class="btn pri">' + ic('send') + 'إرسال</button></form>'
-      : '<div class="ac-msgs" id="acMsgs">' + msgsHTML(null) + '</div>';
-    return headH + '<div class="chips">' + tabs + '</div>' +
-      '<div class="ac-wrap card' + (r ? ' has-open' : '') + '"><div class="ac-side"><input class="inp" id="acQ" placeholder="ابحث بالاسم أو الرقم…" value="' + esc(UI.acQ || '') + '"><div class="ac-list" id="acList">' + listHTML() + '</div></div>' +
-      '<div class="ac-pane">' + pane + '</div></div>';
-  };
-  function scrollEnd(){ var m = document.getElementById('acMsgs'); if (m) m.scrollTop = m.scrollHeight; }
+  function openCur(){ var r = byTid(UI.chat); if (r) { openSub(r); if (UI.view === 'chats' && document.visibilityState !== 'hidden') markRead(r); } }
+
   var rT = null;
   function refresh(){
-    if (UI.view !== 'app_chats') return; clearTimeout(rT);
+    clearTimeout(rT);
     rT = setTimeout(function(){
-      var a = document.activeElement, r = cur();
-      if (a && (a.id === 'acIn' || a.id === 'acQ')) {
-        var l = document.getElementById('acList'); if (l) l.innerHTML = listHTML();
-        var m = document.getElementById('acMsgs'); if (m && r) { var end = m.scrollHeight - m.scrollTop - m.clientHeight < 80; m.innerHTML = msgsHTML(r); if (end) scrollEnd(); }
-      } else { render(); scrollEnd(); }
-      if (r && document.visibilityState !== 'hidden') markRead(r);
-    }, 200);
+      var changed = inject(); openCur(); nav();
+      if (!changed || UI.view !== 'chats') return;
+      var a = document.activeElement;
+      if (a && a.id === 'msgIn') { var v = a.value; try { render(); } catch(e){} var j = document.getElementById('msgIn'); if (j) { j.value = v; j.focus(); } }
+      else if (!(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest && a.closest('#view'))) { try { render(); } catch(e){} }
+      try { scrollMsgs(); } catch(e){}
+    }, 150);
   }
   function nav(){ try { renderNav(); } catch(e){} }
+  /* إذا استُبدلت قائمة المحادثات من المزامنة تُعاد محادثات التطبيق إليها */
+  setInterval(function(){ if (!started || !Array.isArray(S.chats)) return; var n = 0; CH.forEach(function(c){ n += (DATA[c.k] || []).length; });
+    if (S.chats.filter(function(c){ return c && c._app; }).length !== n) { lastSig = ''; refresh(); } }, 1500);
 
-  document.addEventListener('click', function(e){
-    var t = e.target.closest('[data-act="acCol"],[data-act="acOpen"],[data-act="acBack"],[data-act="acSchema"],[data-act="acGo"]'); if (!t) return;
-    e.stopImmediatePropagation(); var a = t.dataset.act;
-    if (a === 'acGo') { go('app_chats'); return; }
-    if (a === 'acCol') { UI.acCol = t.dataset.id; UI.acId = null; render(); }
-    else if (a === 'acOpen') { UI.acId = t.dataset.id; var r = cur(); if (r) markRead(r); render(); scrollEnd(); var i = document.getElementById('acIn'); if (i && window.innerWidth > 900) i.focus(); nav(); }
-    else if (a === 'acBack') { UI.acId = null; render(); }
-    else if (a === 'acSchema') {
-      var out = {};
-      CH.forEach(function(c){ var L = DATA[c.k] || []; if (!L.length) { out[c.k] = STATE[c.k] || 'لم يُحمّل'; return; }
-        var s = {}; L.slice(0, 5).forEach(function(r){ Object.keys(r.d).forEach(function(k){ var v = r.d[k]; if (!s[k]) s[k] = v == null ? 'null' : typeof v.toDate === 'function' ? 'Timestamp' : Array.isArray(v) ? 'Array(' + v.length + ')' : typeof v === 'object' ? 'Object{' + Object.keys(v).slice(0, 8).join(',') + '}' : typeof v; }); });
-        var ms2 = {}, mode = null, ex = [];
-        L.slice(0, 20).forEach(function(r){ var K = MODE[c.k + '/' + r.id]; if (K && !mode) mode = K; (MSGS[c.k + '/' + r.id] || []).slice(-3).forEach(function(m){ Object.keys(m.raw).forEach(function(k){ var v = m.raw[k]; if (!ms2[k]) ms2[k] = v == null ? 'null' : typeof v.toDate === 'function' ? 'Timestamp' : typeof v === 'object' ? 'Object' : typeof v + (typeof v === 'boolean' || (typeof v === 'string' && v.length < 25) ? '=' + v : ''); }); if (ex.length < 4) ex.push(m.admin ? 'admin' : 'user'); }); });
-        out[c.k] = {count: L.length, fields: s, messages: mode, messageFields: ms2, detected: ex}; });
-      var str = JSON.stringify(out, null, 1);
-      (navigator.clipboard ? navigator.clipboard.writeText(str) : Promise.reject()).then(function(){ toast('نُسخ هيكل المحادثات، الصقه في المحادثة', 'content_copy'); })
-        .catch(function(){ modal({title: 'هيكل المحادثات', icon: 'data_object', wide: 1, ok: 'إغلاق', onOk: function(){}, body: '<textarea class="inp" style="height:50vh;direction:ltr" readonly>' + esc(str) + '</textarea>'}); });
-    }
-  }, true);
+  /* فتح محادثة من التطبيق */
+  document.addEventListener('click', function(e){ var b = e.target.closest && e.target.closest('[data-act="chat"]'); if (!b || !b.dataset.id || b.dataset.id.indexOf(PFX) !== 0) return;
+    setTimeout(function(){ openCur(); }, 0); }, true);
+  /* الرد من «مركز المحادثات» يُرسل إلى التطبيق */
   document.addEventListener('submit', function(e){
-    if (!e.target || e.target.id !== 'acForm') return; e.preventDefault(); e.stopImmediatePropagation();
-    var i = document.getElementById('acIn'), v = (i && i.value || '').trim(), r = cur(); if (!v || !r) return;
-    var M = MODE[r.col + '/' + r.id] || {}; if (M.kind === 'sub' && !MSGS[r.col + '/' + r.id]) { toast('انتظر تحميل الرسائل', 'hourglass_top'); return; }
+    if (!e.target || e.target.id !== 'composer' || !UI.chat || String(UI.chat).indexOf(PFX) !== 0) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    var r = byTid(UI.chat), i = document.getElementById('msgIn'), v = (i && i.value || '').trim();
+    if (!r) { toast('المحادثة غير موجودة في التطبيق', 'error'); return; }
+    var atts = (TMP.chat || []).filter(function(a){ return a && /^https:\/\//.test(a.data || ''); });
+    if (atts.length) v = (v ? v + '\n' : '') + atts.map(function(a){ return a.data; }).join('\n');
+    TMP.chat = [];
+    if (!v) return;
+    var M = MODE[r.col + '/' + r.id] || {}; if (M.kind === 'sub' && !MSGS[r.col + '/' + r.id]) { openSub(r); toast('انتظر تحميل الرسائل ثم أعد الإرسال', 'hourglass_top'); return; }
     i.value = ''; i.disabled = true;
-    send(r, v).then(function(guessed){ i.disabled = false; i.focus(); if (guessed) toast('أُرسل الرد. هذه أول رسالة من الإدارة: تأكد من ظهورها في التطبيق', 'info'); })
+    send(r, v).then(function(guessed){ i.disabled = false; try { i.focus(); } catch(x){} if (guessed) toast('أُرسل الرد. هذه أول رسالة من الإدارة في هذه المحادثات: تأكد من ظهورها في التطبيق', 'info'); })
       .catch(function(err){ i.disabled = false; i.value = v; console.warn('[app-chats] send', err);
-        toast(/permission/i.test(String(err && (err.code || err.message))) ? 'القاعدة ترفض إرسال الرد: راجع قواعد الأمان' : 'تعذر إرسال الرد', 'error'); });
+        toast(/permission/i.test(String(err && (err.code || err.message))) ? 'القاعدة ترفض إرسال الرد: راجع قواعد الأمان' : 'تعذر إرسال الرد إلى التطبيق', 'error'); });
   }, true);
-  document.addEventListener('input', function(e){ if (e.target.id === 'acQ') { UI.acQ = e.target.value; var l = document.getElementById('acList'); if (l) l.innerHTML = listHTML(); } });
 
-  /* زر في صفحة محادثات النظام */
-  if (VIEWS.chats) { var _vc = VIEWS.chats; VIEWS.chats = function(){ var h = _vc.apply(this, arguments); if (typeof STAFF !== 'undefined' && STAFF.user && typeof isBoard === 'function' && isBoard()) return h;
-    var n = unreadAll();
-    var bar = '<div class="card card-b row" style="justify-content:space-between;border-color:var(--gold-line,#C5A976);background:var(--gold-soft,#FBF8F1)"><span class="small">' + ic('smartphone') + ' <b>محادثات تطبيق المساجد</b> (المستخدمون والمناديب) في صفحة مستقلة' + (n ? ': <b class="num">' + n + '</b> محادثة جديدة' : '') + '</span><button class="btn sm pri" data-act="acGo">' + ic('forum') + 'فتح محادثات التطبيق</button></div>';
-    var i = h.indexOf('</div>', h.indexOf('class="page-head')); if (h.indexOf('class="page-head') > -1 && i > -1) { var j = h.indexOf('</div>', i + 6); return h.slice(0, j + 6) + bar + h.slice(j + 6); } return bar + h; }; }
-
-  /* القائمة الجانبية */
-  var item = {k: 'app_chats', t: 'محادثات التطبيق', i: 'mark_unread_chat_alt', b: function(){ return unreadAll(); }};
-  var placed = false;
-  NAV_FULL.forEach(function(g){ if (placed) return; var ix = (g.items || []).findIndex(function(x){ return x.k === 'chats'; }); if (ix > -1) { g.items.splice(ix + 1, 0, item); placed = true; } });
-  if (!placed) { var gi = NAV_FULL.findIndex(function(g){ return g.g === 'الطلبات والميدان'; }); if (gi > -1) NAV_FULL[gi].items.push(item); else NAV_FULL.splice(1, 0, {g: 'تطبيق المساجد', items: [item]}); }
-  try { if (typeof applyNavPerms === 'function' && STAFF.user) applyNavPerms(); } catch(e){}
-
-  /* التنسيق */
-  var st = document.createElement('style');
-  st.textContent = '.ac-wrap{display:flex;gap:0;padding:0;overflow:hidden;min-height:560px;height:calc(100vh - 260px)}' +
-    '.ac-side{width:330px;flex:none;border-inline-end:1px solid var(--line,#D6DFE5);display:flex;flex-direction:column;gap:8px;padding:10px}' +
-    '.ac-list{overflow:auto;flex:1;display:flex;flex-direction:column;gap:2px}' +
-    '.ac-item{display:flex;align-items:center;gap:10px;width:100%;text-align:start;background:none;border:0;border-radius:8px;padding:10px;cursor:pointer;font:inherit;color:inherit}' +
-    '.ac-item:hover{background:var(--bg-soft,#F5F7F9)}.ac-item.on{background:var(--gold-soft,#F3ECDD)}' +
-    '.ac-av{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;background:var(--bg-soft,#EAF0F4);color:var(--pri,#1D5271)}' +
-    '.ac-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.ac-tx b{font-size:.92rem}.ac-tx .tiny{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '.ac-meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}' +
-    '.ac-pane{flex:1;min-width:0;display:flex;flex-direction:column}' +
-    '.ac-top{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line,#D6DFE5)}.ac-back{display:none}' +
-    '.ac-msgs{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px;background:var(--bg,#F5F7F9)}' +
-    '.ac-msgs .empty{margin:auto}' +
-    '.ac-msg{max-width:72%;padding:8px 12px;border-radius:12px;font-size:.92rem;line-height:1.6;white-space:pre-wrap;word-break:break-word;display:flex;flex-direction:column;gap:4px}' +
-    '.ac-msg.them{align-self:flex-start;background:var(--card,#fff);border:1px solid var(--line,#D6DFE5);color:var(--ink,#17384C)}' +
-    '.ac-msg.me{align-self:flex-end;background:#1D5271;color:#fff}.ac-msg.me .tiny{color:#D5E2EA}.ac-msg .tiny{opacity:.85}' +
-    '.ac-msg img{max-width:240px;max-height:240px;border-radius:8px;display:block}' +
-    '.ac-form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line,#D6DFE5)}.ac-form .inp{flex:1}' +
-    '@media (max-width:900px){.ac-wrap{height:calc(100vh - 230px);min-height:460px}.ac-side{width:100%;border:0}.ac-wrap.has-open .ac-side{display:none}.ac-wrap:not(.has-open) .ac-pane{display:none}.ac-back{display:inline-flex}.ac-msg{max-width:86%}}';
-  document.head.appendChild(st);
+  /* نسخ هيكل المحادثات (للمطور) */
+  window.zulfiChatSchema = function(){
+    var out = {};
+    CH.forEach(function(c){ var L = DATA[c.k] || []; if (!L.length) { out[c.k] = STATE[c.k] || 'لم يُحمّل'; return; }
+      var s = {}; L.slice(0, 5).forEach(function(r){ Object.keys(r.d).forEach(function(k){ var v = r.d[k]; if (!s[k]) s[k] = v == null ? 'null' : typeof v.toDate === 'function' ? 'Timestamp' : Array.isArray(v) ? 'Array(' + v.length + ')' : typeof v === 'object' ? 'Object{' + Object.keys(v).slice(0, 8).join(',') + '}' : typeof v; }); });
+      var ms2 = {}, mode = null;
+      L.slice(0, 20).forEach(function(r){ var K = MODE[c.k + '/' + r.id]; if (K && !mode) mode = K; (MSGS[c.k + '/' + r.id] || []).slice(-3).forEach(function(m){ Object.keys(m.raw).forEach(function(k){ var v = m.raw[k]; if (!ms2[k]) ms2[k] = v == null ? 'null' : typeof v.toDate === 'function' ? 'Timestamp' : typeof v === 'object' ? 'Object' : typeof v + (typeof v === 'boolean' || (typeof v === 'string' && v.length < 25) ? '=' + v : ''); }); }); });
+      out[c.k] = {count: L.length, fields: s, messages: mode, messageFields: ms2}; });
+    var str = JSON.stringify(out, null, 1);
+    modal({title: 'هيكل محادثات التطبيق', icon: 'data_object', wide: 1, ok: 'إغلاق', onOk: function(){}, body: '<p class="small muted">انسخ النص وأرسله للمطور.</p><textarea class="inp" style="height:50vh;direction:ltr" readonly>' + esc(str) + '</textarea>'});
+  };
+  if (VIEWS.chats) { var _vc = VIEWS.chats; VIEWS.chats = function(){ var h = _vc.apply(this, arguments);
+    if (!(SESSION && SESSION.type === 'admin') || (typeof STAFF !== 'undefined' && STAFF.user && typeof isBoard === 'function' && isBoard())) return h;
+    return h.replace('<button class="btn sm" data-act="chatNew"', '<button class="btn sm ghost" onclick="zulfiChatSchema()" title="هيكل محادثات التطبيق للمطور">' + ic('data_object') + '</button><button class="btn sm" data-act="chatNew"'); }; }
 
   var w = setInterval(function(){ if (!ready()) return; clearInterval(w); start(); }, 1000);
-  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') { var r = cur(); if (r && UI.view === 'app_chats') markRead(r); } });
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') openCur(); });
 })();
