@@ -104,7 +104,7 @@
       db.collection(c.k).limit(500).onSnapshot(function(qs){
         var L = []; qs.forEach(function(doc){ L.push({id: doc.id, col: c.k, ref: doc.ref, d: doc.data() || {}}); });
         L.forEach(function(r){ var ak = null; for (var i = 0; i < ARR.length; i++) if (Array.isArray(r.d[ARR[i]])) { ak = ARR[i]; break; }
-          if (ak) { MODE[c.k + '/' + r.id] = {kind: 'array', key: ak}; MSGS[c.k + '/' + r.id] = r.d[ak].map(function(m, i){ return norm(m, r, i); }).sort(byTime); }
+          if (ak) { MODE[c.k + '/' + r.id] = {kind: 'array', key: ak}; MSGS[c.k + '/' + r.id] = r.d[ak].map(function(m, i){ var n = norm(m, r, i); n.cv = r; return n; }).sort(byTime); }
           else if (!MODE[c.k + '/' + r.id]) MODE[c.k + '/' + r.id] = {kind: 'sub', key: null}; });
         L.sort(function(a, b){ return lastMs(b) - lastMs(a); });
         if (!SEEN['__init_' + c.k]) { var t0 = Date.now(); L.forEach(function(r){ SEEN[c.k + '/' + r.id] = t0; }); SEEN['__init_' + c.k] = t0; keepSeen(); }
@@ -121,18 +121,18 @@
     var t = lastMs(r); return t && t > (SEEN[r.col + '/' + r.id] || 0) ? 1 : 0; }
   function unreadAll(){ var n = 0; CH.forEach(function(c){ (DATA[c.k] || []).forEach(function(r){ if (unread(r)) n++; }); }); return n; }
 
-  /* الرسائل في مجموعة فرعية: تُقرأ للمحادثة المفتوحة فقط */
+  /* الرسائل في مجموعة فرعية: تُقرأ عند فتح المحادثة وتبقى متابَعة لحظياً */
+  var SUBON = {};
   function openSub(r){
-    var key = r.col + '/' + r.id, M = MODE[key]; if (!M || M.kind !== 'sub') return; if (subKey === key) return;
-    if (subOff) { try { subOff(); } catch(e){} subOff = null; } subKey = key;
+    var key = r.col + '/' + r.id, M = MODE[key]; if (!M || M.kind !== 'sub' || SUBON[key]) return; SUBON[key] = 1;
     var tryName = function(idx){
       var name = M.key || SUBS[idx]; if (!name) { MSGS[key] = MSGS[key] || []; refresh(); return; }
       var off = r.ref.collection(name).limit(500).onSnapshot(function(qs){
         if (qs.empty && !M.key && idx < SUBS.length - 1) { off(); tryName(idx + 1); return; }
-        M.key = name; var L = [], i = 0; qs.forEach(function(doc){ var n = norm(doc.data(), r, i++); n.id = doc.id; L.push(n); }); L.sort(byTime);
+        M.key = name; var cur = (DATA[r.col] || []).filter(function(x){ return x.id === r.id; })[0] || r;
+        var L = [], i = 0; qs.forEach(function(doc){ var n = norm(doc.data(), cur, i++); n.id = doc.id; n.cv = cur; L.push(n); }); L.sort(byTime);
         MSGS[key] = L; refresh(); nav();
       }, function(err){ console.warn('[app-chats] sub', name, err && err.code); MSGS[key] = MSGS[key] || []; refresh(); });
-      subOff = off;
     };
     tryName(0);
   }
@@ -194,42 +194,66 @@
   }
 
   /* ---------- دمج محادثات التطبيق داخل «مركز المحادثات» ---------- */
-  var PFX = 'AP~';
-  function tid(r, req){ return PFX + r.col + '~' + r.id + (req ? '@' + req : ''); }
-  function byTid(id){ if (!id || id.indexOf(PFX) !== 0) return null; var p = id.slice(PFX.length).split('@')[0].split('~'); var col = p[0], did = p.slice(1).join('~');
-    return (DATA[col] || []).filter(function(r){ return r.id === did; })[0] || null; }
-  function title(r){ return txt(pick(r.d, F.name)) || txt(pick(r.d, F.phone)) || ('مستخدم التطبيق ' + r.id.slice(0, 5)); }
+  var PFX = 'AP~', GROUPS = {}, TARGET = {};
+  function normPhone(p){ var d = String(p || '').replace(/\D/g, ''); if (!d) return '';
+    if (d.indexOf('00966') === 0) d = d.slice(5); else if (d.indexOf('966') === 0 && d.length > 10) d = d.slice(3);
+    if (d.length === 9 && d.charAt(0) === '5') d = '0' + d; return d; }
+  function phoneOf(r){ return normPhone(pick(r.d, r.col === 'driverAdminChats' ? ['driverPhone', 'phone', 'phoneNumber', 'userPhone'] : ['userPhone', 'phone', 'phoneNumber', 'contactNumber', 'mobile'])); }
+  /* كل شخص يُعرف برقم جواله: محادثاته المتعددة تُجمع في محادثة واحدة */
+  function gkey(r){ var ph = phoneOf(r), k = ph ? 'p' + ph : r.d.userId ? 'u' + r.d.userId : (r.col === 'driverAdminChats' && r.d.driverId) ? 'd' + r.d.driverId : 'i' + r.id;
+    return r.col + '|' + String(k).replace(/[~@\s]/g, '_'); }
+  function buildGroups(){ var G = {}; CH.forEach(function(c){ (DATA[c.k] || []).forEach(function(r){ var k = gkey(r); (G[k] = G[k] || []).push(r); }); });
+    Object.keys(G).forEach(function(k){ G[k].sort(function(a, b){ return lastMs(b) - lastMs(a); }); }); GROUPS = G; return G; }
+  function tid(gk, req){ return PFX + gk + (req ? '@' + req : ''); }
+  function groupOf(id){ if (!id || String(id).indexOf(PFX) !== 0) return null; return GROUPS[String(id).slice(PFX.length).split('@')[0]] || null; }
+  function byTid(id){ if (TARGET[id]) return TARGET[id]; var G = groupOf(id); return G ? G[0] : null; }
+  function title(r){ return txt(pick(r.d, r.col === 'driverAdminChats' ? ['driverName', 'name', 'userName'] : ['userName', 'name', 'applicantName', 'displayName', 'fullName'])) || txt(pick(r.d, F.phone)) || ('مستخدم التطبيق ' + r.id.slice(0, 5)); }
   function atT(v){ var d = toDate(v); if (!d) return ''; var now = new Date(); var t = (d.getHours() % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + (d.getHours() < 12 ? 'ص' : 'م');
     return d.toDateString() === now.toDateString() ? t : d.toISOString().slice(5, 10).replace('-', '/') + ' ' + t; }
-  function thread(r){
-    var L = MSGS[r.col + '/' + r.id], msgs;
-    var fromOf = function(m){ if (m.admin) return ''; var sid = String(pick(m.raw, ['senderId', 'senderUid', 'fromId', 'uid']) || '');
-      if (sid && r.d.driverId && sid === String(r.d.driverId)) return 'المندوب: ' + (txt(r.d.driverName) || 'المندوب');
-      if (sid && r.d.userId && sid === String(r.d.userId) && r.d.driverId) return txt(r.d.userName) || ''; return ''; };
-    if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, label: fromOf(m), byName: m.admin ? (m.raw.sentByName || '') : '', byRole: m.admin ? (m.raw.sentByRole || '') : '', t: m.text, at: atT(m.t), atts: attsOf(m)}; });
-    else { var lt = txt(pick(r.d, F.last)); msgs = lt ? [{me: 0, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
-    var info = [txt(pick(r.d, F.phone)), txt(pick(r.d, F.mosque)), txt(r.d.requestType), r.d.driverName && r.col !== 'driverAdminChats' ? 'المندوب: ' + txt(r.d.driverName) : '', r.d.lastOrderId ? 'طلب ' + txt(r.d.lastOrderId) : ''].filter(Boolean).join(' · ');
-    return {id: tid(r), _app: 1, _t: lastMs(r), req: '', with: title(r), kind: (r.col === 'driverAdminChats' ? 'مندوب (من التطبيق)' : 'مستخدم التطبيق') + (info ? ' · ' + info : ''), unread: unread(r) ? (typeof pick(r.d, F.adminUnread) === 'number' ? pick(r.d, F.adminUnread) : 1) : 0, msgs: msgs};
+  /* من أرسل الرسالة؟ الإدارة (موظف) أو المندوب أو المستخدم */
+  function sender(m){ var raw = m.raw || {}, r = m.cv;
+    if (m.admin) { var role = String(raw.sentByRole || ''), n = String(raw.sentByName || '');
+      if (raw.sentFrom === 'بوابة المناديب' || /مندوب|مقاول|مشرف ميداني/.test(role)) return {s: 'rep', n: n || 'المندوب', role: role};
+      return {s: 'staff', n: n, role: role}; }
+    var sid = String(pick(raw, ['senderId', 'senderUid', 'fromId', 'uid']) || '');
+    if (r && r.col === 'driverAdminChats') return {s: 'driver', n: title(r)};
+    if (sid && r && r.d.driverId && sid === String(r.d.driverId)) return {s: 'driver', n: txt(r.d.driverName) || 'المندوب'};
+    return {s: 'user', n: r ? title(r) : ''}; }
+  function staffLabel(x){ return 'الإدارة' + (x.n ? ': ' + x.n + (x.role && x.role !== x.n ? ' (' + x.role + ')' : '') : ''); }
+  function groupMsgs(G){ var all = [], any = false;
+    G.forEach(function(r){ var L = MSGS[r.col + '/' + r.id]; if (L) { any = true; all = all.concat(L); } });
+    if (!any) return null; return all.slice().sort(function(a, b){ var x = ms(a.t), y = ms(b.t); return (x && y) ? x - y : 0; }); }
+  function thread(gk, G){
+    var r0 = G[0], L = groupMsgs(G), msgs;
+    if (L) msgs = L.map(function(m){ var x = sender(m), lab = x.s === 'staff' ? staffLabel(x) : x.s === 'user' ? 'المستخدم: ' + x.n : 'المندوب: ' + x.n;
+      return {me: x.s === 'staff' ? 1 : 0, label: lab, t: m.text, at: atT(m.t), atts: attsOf(m)}; });
+    else { var lt = txt(pick(r0.d, F.last)); msgs = lt ? [{me: 0, t: lt, at: atT(pick(r0.d, F.lastT)), atts: []}] : []; }
+    var ph = phoneOf(r0), un = G.filter(function(r){ return unread(r); }).length;
+    var info = [ph, G.length > 1 ? G.length + ' محادثات' : '', txt(pick(r0.d, F.mosque)), txt(r0.d.requestType), r0.d.driverName && r0.col !== 'driverAdminChats' ? 'المندوب: ' + txt(r0.d.driverName) : '', r0.d.lastOrderId ? 'طلب ' + txt(r0.d.lastOrderId) : ''].filter(Boolean).join(' · ');
+    return {id: tid(gk), _app: 1, _t: Math.max.apply(null, G.map(lastMs)), req: '', with: title(r0), kind: (r0.col === 'driverAdminChats' ? 'مندوب (من التطبيق)' : 'مستخدم التطبيق') + (info ? ' · ' + info : ''), unread: un, msgs: msgs};
   }
   /* ---------- البوابة: محادثة العميل في التطبيق لكل مهمة جاءت من التطبيق ---------- */
   function commonAdmin(){ var c = {}, best = '', n = 0; (DATA.conversations || []).forEach(function(r){ var a = r.d.adminId; if (a) { c[a] = (c[a] || 0) + 1; if (c[a] > n) { n = c[a]; best = a; } } }); return best; }
-  function isAppReq(r){ return r && r.appRef && r.appRef.id && r.appUid; }
-  function convFor(req){ var L = DATA.conversations || [], u = String(req.appUid);
-    return L.filter(function(r){ return String(r.d.userId || '') === u || r.id === u; })[0] || L.filter(function(r){ return r.d.lastOrderId && String(r.d.lastOrderId) === String(req.appRef.id); })[0] || null; }
+  function isAppReq(r){ return r && r.appRef && r.appRef.id && (r.appUid || r.phone); }
+  function convFor(req){ var L = DATA.conversations || [], u = String(req.appUid || '#'), ph = normPhone(req.phone);
+    return L.filter(function(r){ return r.d.lastOrderId && String(r.d.lastOrderId) === String(req.appRef.id); })[0] ||
+      L.filter(function(r){ return String(r.d.userId || '') === u || r.id === u; }).sort(function(a, b){ return lastMs(b) - lastMs(a); })[0] ||
+      (ph ? L.filter(function(r){ return phoneOf(r) === ph; }).sort(function(a, b){ return lastMs(b) - lastMs(a); })[0] : null) || null; }
   function myName(){ try { var p = repById(SESSION.id); return p ? p.name : ''; } catch(e){ return ''; } }
   function threadP(r, req){
-    var mine = myName(), msgs, L = r ? MSGS[r.col + '/' + r.id] : null;
-    if (L) msgs = L.map(function(m){ var lab = '';
-      if (m.admin) { if (!(m.raw.sentByName && m.raw.sentByName === mine)) lab = 'الإدارة' + (m.raw.sentByName ? ' · ' + m.raw.sentByName : ''); }
-      else { var sid = String(pick(m.raw, ['senderId', 'senderUid', 'fromId', 'uid']) || ''); if (sid && r.d.driverId && sid === String(r.d.driverId)) lab = 'المندوب: ' + (txt(r.d.driverName) || ''); }
-      return {me: m.admin ? 0 : 1, label: lab, t: m.text, at: atT(m.t), atts: attsOf(m)}; });
+    var mine = myName(), gk = r ? gkey(r) : '', G = r ? (GROUPS[gk] || [r]) : [], L = r ? groupMsgs(G) : null, msgs;
+    if (L) msgs = L.map(function(m){ var x = sender(m), own = x.s === 'rep' && x.n === mine;
+      var lab = own ? '' : x.s === 'staff' ? staffLabel(x) : x.s === 'user' ? 'المستخدم: ' + x.n : 'المندوب: ' + x.n;
+      return {me: own ? 0 : 1, label: lab, t: m.text, at: atT(m.t), atts: attsOf(m)}; });
     else { var lt = r ? txt(pick(r.d, F.last)) : ''; msgs = lt ? [{me: 1, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
-    return {id: r ? tid(r, req.id) : PFX + 'conversations~__new@' + req.id, _app: 1, _t: r ? lastMs(r) : 0, _new: r ? 0 : 1, kind: 'rr', with: (r && txt(pick(r.d, F.name))) || req.by || 'مقدم الطلب',
-      role: 'عبر تطبيق المساجد', req: req.id, rep: req.rep, unread: 0, msgs: msgs};
+    var id = r ? tid(gk, req.id) : PFX + 'conversations|new@' + req.id; if (r) TARGET[id] = r;
+    return {id: id, _app: 1, _t: r ? Math.max.apply(null, G.map(lastMs)) : 0, _new: r ? 0 : 1, kind: 'rr', with: (r && title(r)) || req.by || 'مقدم الطلب',
+      role: 'عبر تطبيق المساجد' + (req.phone ? ' · ' + req.phone : ''), req: req.id, rep: req.rep, unread: 0, msgs: msgs};
   }
   function portalThreads(){
     if (!(typeof SESSION !== 'undefined' && SESSION.type === 'rep' && typeof myTasks === 'function')) return [];
     if (STATE.conversations !== 'ok') return [];
+    buildGroups(); TARGET = {};
     return myTasks().filter(isAppReq).map(function(req){ return threadP(convFor(req), req); });
   }
   /* حذف محادثات «مقدم الطلب» الداخلية القديمة لطلبات التطبيق إن لم تكن فيها رسائل حقيقية */
@@ -243,8 +267,7 @@
     if (dropOldRR()) { try { save(); } catch(e){} }
     var T;
     if (PORTAL) T = portalThreads();
-    else { var A = []; CH.forEach(function(c){ (DATA[c.k] || []).forEach(function(r){ A.push(r); }); });
-      A.sort(function(a, b){ return lastMs(b) - lastMs(a); }); T = A.map(thread); }
+    else { var G = buildGroups(); T = Object.keys(G).map(function(k){ return thread(k, G[k]); }); T.sort(function(a, b){ return b._t - a._t; }); }
     var sig = JSON.stringify(T);
     var has = S.chats.some(function(c){ return c && c._app; });
     if (!force && sig === lastSig && has === (T.length > 0) && S.chats.filter(function(c){ return c && c._app; }).length === T.length) return false;
@@ -253,7 +276,8 @@
     S.chats.length = 0; Array.prototype.push.apply(S.chats, T.concat(keep));
     return true;
   }
-  function openCur(){ var r = byTid(UI.chat); if (r) { openSub(r); if (UI.view === 'chats' && document.visibilityState !== 'hidden') markRead(r); } }
+  function openCur(){ var G = groupOf(UI.chat); if (!G) { var r1 = byTid(UI.chat); G = r1 ? [r1] : null; } if (!G) return;
+    G.forEach(function(r){ openSub(r); if (UI.view === 'chats' && document.visibilityState !== 'hidden' && unread(r)) markRead(r); }); }
 
   var rT = null;
   function refresh(){
@@ -269,7 +293,7 @@
   }
   function nav(){ try { renderNav(); } catch(e){} }
   /* إذا استُبدلت قائمة المحادثات من المزامنة تُعاد محادثات التطبيق إليها */
-  setInterval(function(){ if (!started || !Array.isArray(S.chats)) return; var n = 0; if (PORTAL) n = portalThreads().length; else CH.forEach(function(c){ n += (DATA[c.k] || []).length; });
+  setInterval(function(){ if (!started || !Array.isArray(S.chats)) return; var n = 0; if (PORTAL) n = portalThreads().length; else n = Object.keys(buildGroups()).length;
     if (S.chats.filter(function(c){ return c && c._app; }).length !== n) { lastSig = ''; refresh(); } }, 1500);
 
   if (VIEWS.chats) { var _vch = VIEWS.chats; VIEWS.chats = function(){ var h = _vch.apply(this, arguments); setTimeout(openCur, 0); return h; }; }
@@ -282,7 +306,7 @@
     e.preventDefault(); e.stopImmediatePropagation();
     var r = byTid(UI.chat), i = document.getElementById('msgIn'), v = (i && i.value || '').trim();
     var reqId = String(UI.chat).split('@')[1], req = reqId ? (S.requests || []).filter(function(x){ return x.id === reqId; })[0] : null;
-    if (!r && !(PORTAL && req && isAppReq(req))) { toast('المحادثة غير موجودة في التطبيق', 'error'); return; }
+    if (!r && !(PORTAL && req && isAppReq(req) && req.appUid)) { toast(PORTAL ? 'لا يمكن بدء محادثة: هذا العميل غير مرتبط بحساب في التطبيق' : 'المحادثة غير موجودة في التطبيق', 'error'); return; }
     var pend = (TMP.chat || []).filter(function(a){ return a && typeof a.data === 'string'; });
     if (!v && !pend.length) return;
     if (pend.length) {
