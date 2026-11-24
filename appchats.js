@@ -65,8 +65,34 @@
     if (sid && /admin/i.test(String(sid))) return true;
     return false;
   }
+  /* المرفقات: يبحث في كل حقول الرسالة عن روابط (نص، مصفوفة، أو JSON فيه secure_url) */
+  var SKIP = /^(senderId|senderUid|fromId|uid|userId|driverId|adminId|senderName|sentByName|sentByRole|sentFrom|id|messageId|orderId|conversationId)$/;
+  function urlsIn(v, out){ if (!v) return out;
+    if (typeof v === 'string') { var x = v.trim();
+      if (/^https?:\/\/\S+$/.test(x) || /^data:(image|application\/pdf|audio|video)/.test(x)) out.push(x);
+      else if (x.length > 200 && /^(\/9j\/|iVBORw0K|R0lGOD|UklGR)/.test(x)) out.push('data:image/' + (x.charAt(0) === 'i' ? 'png' : x.charAt(0) === 'R' ? 'gif' : x.charAt(0) === 'U' ? 'webp' : 'jpeg') + ';base64,' + x);
+      else if (/^[\[{]/.test(x)) { try { urlsIn(JSON.parse(x), out); } catch(e){} } return out; }
+    if (Array.isArray(v)) { v.forEach(function(y){ urlsIn(y, out); }); return out; }
+    if (typeof v === 'object' && typeof v.toDate !== 'function') { if (v.secure_url || v.url || v.downloadUrl || v.downloadURL) urlsIn(v.secure_url || v.url || v.downloadUrl || v.downloadURL, out); else Object.keys(v).forEach(function(k){ urlsIn(v[k], out); }); }
+    return out; }
+  function kindOf(u, raw){ var t = String((raw && (raw.type || raw.messageType || raw.mediaType || raw.fileType)) || '');
+    if (/pdf/i.test(t) || /\.pdf(\?|$)/i.test(u)) return 'pdf';
+    if (/audio|voice|sound/i.test(t) || /\.(m4a|mp3|aac|wav|ogg|opus)(\?|$)/i.test(u)) return 'audio';
+    if (/video/i.test(t) || /\.(mp4|mov|3gp|webm)(\?|$)/i.test(u) || /\/video\/upload\//.test(u)) return 'video';
+    return 'image'; }
   function norm(m, conv, i){ var raw = (m && typeof m === 'object') ? m : {text: String(m)};
-    return {raw: raw, i: i, text: txt(pick(raw, F.text)), file: url(pick(raw, F.file)), t: pick(raw, F.time), admin: isAdminMsg(raw, conv)}; }
+    var text = txt(pick(raw, F.text)), files = [];
+    Object.keys(raw).forEach(function(k){ if (SKIP.test(k) || F.text.indexOf(k) > -1 || F.time.indexOf(k) > -1) return; urlsIn(raw[k], files); });
+    if (/^https?:\/\/\S+$/.test(text.trim()) && (/image|photo|picture|file|media/i.test(String(raw.type || raw.messageType || '')) || /cloudinary|firebasestorage|\.(jpe?g|png|gif|webp|heic|pdf|m4a|mp3|mp4)(\?|$)/i.test(text))) { files.push(text.trim()); text = ''; }
+    files = files.filter(function(u, j){ return files.indexOf(u) === j; });
+    return {raw: raw, i: i, text: text, files: files.map(function(u){ return {u: u, k: kindOf(u, raw)}; }), file: files[0] || '', t: pick(raw, F.time), admin: isAdminMsg(raw, conv)}; }
+  var APF = {};
+  document.addEventListener('click', function(e){ var b = e.target.closest && e.target.closest('[data-view^="APF-"]'); if (!b) return; var u = APF[b.dataset.view]; if (!u) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (/^data:/.test(u)) { var w = window.open(); if (w) w.document.write('<img src="' + u + '" style="max-width:100%">'); } else window.open(u, '_blank', 'noopener'); }, true);
+  function hid(u){ var h = 0; for (var i = 0; i < u.length; i += Math.max(1, Math.floor(u.length / 400))) h = (h * 31 + u.charCodeAt(i)) | 0; return 'APF-' + (h >>> 0).toString(36) + '-' + u.length; }
+  function attsOf(m){ (m.files || []).forEach(function(f){ APF[hid(f.u)] = f.u; }); return (m.files || []).map(function(f, j){ var nm = f.k === 'pdf' ? 'ملف PDF' : f.k === 'audio' ? 'رسالة صوتية' : f.k === 'video' ? 'فيديو' : 'صورة من التطبيق';
+    return {id: hid(f.u), name: nm, type: f.k === 'image' ? 'image' : f.k === 'pdf' ? 'pdf' : 'file', data: f.u}; }); }
 
   /* ---------- الاتصال والقراءة ---------- */
   function ready(){ return window.firebase && firebase.apps && firebase.apps.length && firebase.firestore && window.__zulfiSyncReady; }
@@ -88,7 +114,7 @@
   }
   function byTime(a, b){ var x = ms(a.t), y = ms(b.t); return (x && y) ? x - y : a.i - b.i; }
   function lastMs(r){ var L = MSGS[r.col + '/' + r.id]; var t = ms(pick(r.d, F.lastT)); if (L && L.length) t = Math.max(t, ms(L[L.length - 1].t)); return t; }
-  function lastText(r){ var L = MSGS[r.col + '/' + r.id]; if (L && L.length) { var m = L[L.length - 1]; return (m.admin ? 'أنت: ' : '') + (m.text || (m.file ? 'صورة' : '')); } return txt(pick(r.d, F.last)); }
+  function lastText(r){ var L = MSGS[r.col + '/' + r.id]; if (L && L.length) { var m = L[L.length - 1]; return (m.admin ? 'أنت: ' : '') + (m.text || (m.file ? (m.files[0].k === 'image' ? 'صورة' : 'مرفق') : '')); } return txt(pick(r.d, F.last)); }
   function unread(r){ var n = pick(r.d, F.adminUnread); if (typeof n === 'number') return n; if (typeof n === 'boolean') return n ? 1 : 0;
     if (r.d.isReadByAdmin === false || r.d.readByAdmin === false || r.d.adminRead === false) return 1;
     var L = MSGS[r.col + '/' + r.id]; var last = L && L.length ? L[L.length - 1] : null; if (last && last.admin) return 0;
@@ -180,7 +206,7 @@
     var fromOf = function(m){ if (m.admin) return ''; var sid = String(pick(m.raw, ['senderId', 'senderUid', 'fromId', 'uid']) || '');
       if (sid && r.d.driverId && sid === String(r.d.driverId)) return 'المندوب: ' + (txt(r.d.driverName) || 'المندوب');
       if (sid && r.d.userId && sid === String(r.d.userId) && r.d.driverId) return txt(r.d.userName) || ''; return ''; };
-    if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, label: fromOf(m), byName: m.admin ? (m.raw.sentByName || '') : '', byRole: m.admin ? (m.raw.sentByRole || '') : '', t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
+    if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, label: fromOf(m), byName: m.admin ? (m.raw.sentByName || '') : '', byRole: m.admin ? (m.raw.sentByRole || '') : '', t: m.text, at: atT(m.t), atts: attsOf(m)}; });
     else { var lt = txt(pick(r.d, F.last)); msgs = lt ? [{me: 0, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
     var info = [txt(pick(r.d, F.phone)), txt(pick(r.d, F.mosque)), txt(r.d.requestType), r.d.driverName && r.col !== 'driverAdminChats' ? 'المندوب: ' + txt(r.d.driverName) : '', r.d.lastOrderId ? 'طلب ' + txt(r.d.lastOrderId) : ''].filter(Boolean).join(' · ');
     return {id: tid(r), _app: 1, _t: lastMs(r), req: '', with: title(r), kind: (r.col === 'driverAdminChats' ? 'مندوب (من التطبيق)' : 'مستخدم التطبيق') + (info ? ' · ' + info : ''), unread: unread(r) ? (typeof pick(r.d, F.adminUnread) === 'number' ? pick(r.d, F.adminUnread) : 1) : 0, msgs: msgs};
@@ -196,7 +222,7 @@
     if (L) msgs = L.map(function(m){ var lab = '';
       if (m.admin) { if (!(m.raw.sentByName && m.raw.sentByName === mine)) lab = 'الإدارة' + (m.raw.sentByName ? ' · ' + m.raw.sentByName : ''); }
       else { var sid = String(pick(m.raw, ['senderId', 'senderUid', 'fromId', 'uid']) || ''); if (sid && r.d.driverId && sid === String(r.d.driverId)) lab = 'المندوب: ' + (txt(r.d.driverName) || ''); }
-      return {me: m.admin ? 0 : 1, label: lab, t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
+      return {me: m.admin ? 0 : 1, label: lab, t: m.text, at: atT(m.t), atts: attsOf(m)}; });
     else { var lt = r ? txt(pick(r.d, F.last)) : ''; msgs = lt ? [{me: 1, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
     return {id: r ? tid(r, req.id) : PFX + 'conversations~__new@' + req.id, _app: 1, _t: r ? lastMs(r) : 0, _new: r ? 0 : 1, kind: 'rr', with: (r && txt(pick(r.d, F.name))) || req.by || 'مقدم الطلب',
       role: 'عبر تطبيق المساجد', req: req.id, rep: req.rep, unread: 0, msgs: msgs};
