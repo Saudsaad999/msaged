@@ -296,6 +296,15 @@
   setInterval(function(){ if (!started || !Array.isArray(S.chats)) return; var n = 0; if (PORTAL) n = portalThreads().length; else n = Object.keys(buildGroups()).length;
     if (S.chats.filter(function(c){ return c && c._app; }).length !== n) { lastSig = ''; refresh(); } }, 1500);
 
+  /* إخفاء محادثات «مقدم الطلب» الداخلية لطلبات التطبيق: المحادثة الحقيقية هي محادثة التطبيق */
+  function hiddenRR(c){ if (!c || c._app || c.kind !== 'rr') return false; var r = (S.requests || []).filter(function(x){ return x.id === c.req; })[0];
+    if (!r || !r.appRef) return false; return PORTAL ? S.chats.some(function(x){ return x._app && x.req === c.req; }) : true; }
+  if (typeof visibleChats === 'function') { var _vcx = visibleChats; visibleChats = function(){ var L = _vcx.apply(this, arguments); return Array.isArray(L) ? L.filter(function(c){ return !hiddenRR(c); }) : L; }; }
+  /* حذف الرسالة الوهمية القديمة «متى يمكنكم الحضور؟» من محادثات مقدمي الطلبات */
+  function dropSeed(){ var ch = false; (S.chats || []).forEach(function(c){ if (!c || c._app || !Array.isArray(c.msgs)) return; var n = c.msgs.length;
+      var k = c.msgs.filter(function(m){ return !(m && m.rr && m.at === '09:10' && /متى يمكنكم الحضور؟$/.test(m.t || '')); }); if (k.length !== n) { c.msgs = k; ch = true; } });
+    if (ch) try { save(); } catch(e){} }
+  setInterval(function(){ if (window.__zulfiSyncReady) dropSeed(); }, 4000);
   if (VIEWS.chats) { var _vch = VIEWS.chats; VIEWS.chats = function(){ var h = _vch.apply(this, arguments); setTimeout(openCur, 0); return h; }; }
   /* فتح محادثة من التطبيق */
   document.addEventListener('click', function(e){ var b = e.target.closest && e.target.closest('[data-act="chat"]'); if (!b || !b.dataset.id || b.dataset.id.indexOf(PFX) !== 0) return;
