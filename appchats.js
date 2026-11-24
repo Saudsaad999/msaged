@@ -183,7 +183,7 @@
     if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, label: fromOf(m), byName: m.admin ? (m.raw.sentByName || '') : '', byRole: m.admin ? (m.raw.sentByRole || '') : '', t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
     else { var lt = txt(pick(r.d, F.last)); msgs = lt ? [{me: 0, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
     var info = [txt(pick(r.d, F.phone)), txt(pick(r.d, F.mosque)), txt(r.d.requestType), r.d.driverName && r.col !== 'driverAdminChats' ? 'المندوب: ' + txt(r.d.driverName) : '', r.d.lastOrderId ? 'طلب ' + txt(r.d.lastOrderId) : ''].filter(Boolean).join(' · ');
-    return {id: tid(r), _app: 1, req: '', with: title(r), kind: (r.col === 'driverAdminChats' ? 'مندوب (من التطبيق)' : 'مستخدم التطبيق') + (info ? ' · ' + info : ''), unread: unread(r) ? (typeof pick(r.d, F.adminUnread) === 'number' ? pick(r.d, F.adminUnread) : 1) : 0, msgs: msgs};
+    return {id: tid(r), _app: 1, _t: lastMs(r), req: '', with: title(r), kind: (r.col === 'driverAdminChats' ? 'مندوب (من التطبيق)' : 'مستخدم التطبيق') + (info ? ' · ' + info : ''), unread: unread(r) ? (typeof pick(r.d, F.adminUnread) === 'number' ? pick(r.d, F.adminUnread) : 1) : 0, msgs: msgs};
   }
   /* ---------- البوابة: محادثة العميل في التطبيق لكل مهمة جاءت من التطبيق ---------- */
   function commonAdmin(){ var c = {}, best = '', n = 0; (DATA.conversations || []).forEach(function(r){ var a = r.d.adminId; if (a) { c[a] = (c[a] || 0) + 1; if (c[a] > n) { n = c[a]; best = a; } } }); return best; }
@@ -198,7 +198,7 @@
       else { var sid = String(pick(m.raw, ['senderId', 'senderUid', 'fromId', 'uid']) || ''); if (sid && r.d.driverId && sid === String(r.d.driverId)) lab = 'المندوب: ' + (txt(r.d.driverName) || ''); }
       return {me: m.admin ? 0 : 1, label: lab, t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
     else { var lt = r ? txt(pick(r.d, F.last)) : ''; msgs = lt ? [{me: 1, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
-    return {id: r ? tid(r, req.id) : PFX + 'conversations~__new@' + req.id, _app: 1, _new: r ? 0 : 1, kind: 'rr', with: (r && txt(pick(r.d, F.name))) || req.by || 'مقدم الطلب',
+    return {id: r ? tid(r, req.id) : PFX + 'conversations~__new@' + req.id, _app: 1, _t: r ? lastMs(r) : 0, _new: r ? 0 : 1, kind: 'rr', with: (r && txt(pick(r.d, F.name))) || req.by || 'مقدم الطلب',
       role: 'عبر تطبيق المساجد', req: req.id, rep: req.rep, unread: 0, msgs: msgs};
   }
   function portalThreads(){
