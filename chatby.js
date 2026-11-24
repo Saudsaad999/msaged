@@ -39,7 +39,7 @@
     if (!t || !Array.isArray(t.msgs)) return;
     var els = box.querySelectorAll('.msg'); if (els.length !== t.msgs.length) return;
     for (var i = 0; i < els.length; i++) { var m = t.msgs[i];
-      if (m && !m.me && m.fromName) { var sm0 = els[i].querySelector('small'); if (sm0 && !sm0.getAttribute('data-by')) { sm0.setAttribute('data-by', '1'); sm0.textContent = sm0.textContent.replace(t.with, m.fromName); } continue; }
+      if (m && m.label) { var sm0 = els[i].querySelector('small'); if (sm0 && !sm0.getAttribute('data-by')) { sm0.setAttribute('data-by', '1'); sm0.textContent = (m.at ? m.at + ' · ' : '') + m.label; } continue; }
       var L = m && m.me ? label(m) : ''; if (!L) continue;
       var sm = els[i].querySelector('small'); if (!sm || sm.getAttribute('data-by')) continue;
       sm.setAttribute('data-by', '1'); var b = document.createElement('b'); b.style.fontWeight = '600'; b.textContent = ' · ' + L; sm.appendChild(b); }
