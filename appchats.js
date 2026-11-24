@@ -24,7 +24,7 @@
     mosque: ['mosqueName', 'mosque', 'neighborhoodName'],
     uid: ['userId', 'uid', 'driverId', 'userUid', 'agentId', 'ownerId', 'customerId'],
     last: ['lastMessage', 'lastMsg', 'last_message', 'lastMessageText'],
-    lastT: ['lastMessageTime', 'lastMessageAt', 'lastTime', 'updatedAt', 'lastUpdated', 'lastMessageTimestamp', 'timestamp', 'createdAt'],
+    lastT: ['lastTimestamp', 'lastMessageTime', 'lastMessageAt', 'lastTime', 'updatedAt', 'lastUpdated', 'lastMessageTimestamp', 'timestamp', 'createdAt'],
     adminUnread: ['adminUnread', 'unreadByAdmin', 'unreadForAdmin', 'adminUnreadCount', 'unreadAdmin'],
     userUnread: ['userUnread', 'unreadByUser', 'unreadForUser', 'userUnreadCount', 'driverUnread', 'unreadByDriver', 'unreadForDriver']
   };
@@ -56,8 +56,10 @@
     var s = String(pick(m, ['senderType', 'sender', 'role', 'from', 'type', 'senderRole', 'by', 'author']) || '');
     if (/admin|support|panel|staff|manager|ادار|مشرف|الجمعية/i.test(s)) return true;
     if (/user|driver|agent|client|customer|imam|مستخدم|مندوب|سائق/i.test(s)) return false;
-    var sid = pick(m, ['senderId', 'senderUid', 'fromId', 'uid', 'userId']), cu = conv && pick(conv.d, F.uid);
-    if (sid && cu) return String(sid) !== String(cu);
+    var sid = pick(m, ['senderId', 'senderUid', 'fromId', 'uid', 'userId']), cd = conv ? conv.d : {};
+    if (sid && cd.adminId && String(sid) === String(cd.adminId)) return true;
+    var parts = [cd.userId, cd.uid, cd.driverId, cd.agentId].filter(Boolean).map(String);
+    if (sid && parts.length) return parts.indexOf(String(sid)) < 0;
     if (sid && /admin/i.test(String(sid))) return true;
     return false;
   }
@@ -85,7 +87,7 @@
   function byTime(a, b){ var x = ms(a.t), y = ms(b.t); return (x && y) ? x - y : a.i - b.i; }
   function lastMs(r){ var L = MSGS[r.col + '/' + r.id]; var t = ms(pick(r.d, F.lastT)); if (L && L.length) t = Math.max(t, ms(L[L.length - 1].t)); return t; }
   function lastText(r){ var L = MSGS[r.col + '/' + r.id]; if (L && L.length) { var m = L[L.length - 1]; return (m.admin ? 'أنت: ' : '') + (m.text || (m.file ? 'صورة' : '')); } return txt(pick(r.d, F.last)); }
-  function unread(r){ var n = pick(r.d, F.adminUnread); if (typeof n === 'number') return n;
+  function unread(r){ var n = pick(r.d, F.adminUnread); if (typeof n === 'number') return n; if (typeof n === 'boolean') return n ? 1 : 0;
     if (r.d.isReadByAdmin === false || r.d.readByAdmin === false || r.d.adminRead === false) return 1;
     var L = MSGS[r.col + '/' + r.id]; var last = L && L.length ? L[L.length - 1] : null; if (last && last.admin) return 0;
     var t = lastMs(r); return t && t > (SEEN[r.col + '/' + r.id] || 0) ? 1 : 0; }
@@ -120,7 +122,7 @@
     ['isAdmin', 'fromAdmin', 'isFromAdmin', 'sentByAdmin', 'byAdmin'].forEach(function(k){ if (k in o) o[k] = true; });
     ['isUser', 'fromUser', 'isDriver', 'fromDriver', 'isMe', 'isCustomer'].forEach(function(k){ if (k in o) o[k] = false; });
     ['senderType', 'role', 'senderRole', 'from', 'sender', 'by', 'author'].forEach(function(k){ if (typeof o[k] === 'string') o[k] = 'admin'; });
-    ['senderId', 'senderUid', 'fromId'].forEach(function(k){ if (k in o) o[k] = 'admin'; });
+    ['senderId', 'senderUid', 'fromId'].forEach(function(k){ if (k in o) o[k] = r.d.adminId || 'admin'; });
     ['senderName', 'name', 'userName'].forEach(function(k){ if (k in o) o[k] = 'الإدارة'; });
     if (!keyOf(o, ['isAdmin', 'senderType', 'role', 'senderId', 'sender', 'from'])) o.isAdmin = true;
     return {raw: o, guessed: true};
@@ -147,15 +149,16 @@
     else p = r.ref.collection(M.key || 'messages').add(b.msg);
     var up = {}, k;
     k = keyOf(r.d, F.last); if (k && typeof r.d[k] === 'string') up[k] = text;
-    ['lastMessageTime', 'lastMessageAt', 'lastTime', 'updatedAt', 'lastUpdated', 'lastMessageTimestamp'].forEach(function(x){ if (x in r.d) up[x] = typeof r.d[x] === 'number' ? Date.now() : FV.serverTimestamp(); });
+    ['lastTimestamp', 'lastMessageTime', 'lastMessageAt', 'lastTime', 'updatedAt', 'lastUpdated', 'lastMessageTimestamp'].forEach(function(x){ if (x in r.d) up[x] = typeof r.d[x] === 'number' ? Date.now() : FV.serverTimestamp(); });
     ['lastSender', 'lastSenderId', 'lastSenderType', 'lastMessageSender'].forEach(function(x){ if (typeof r.d[x] === 'string') up[x] = 'admin'; });
-    F.userUnread.forEach(function(x){ if (typeof r.d[x] === 'number') up[x] = FV.increment(1); });
+    F.userUnread.forEach(function(x){ if (typeof r.d[x] === 'number') up[x] = FV.increment(1);
+      else if (typeof r.d[x] === 'boolean' && (!/driver/i.test(x) || r.d.driverId)) up[x] = true; });
     ['isReadByUser', 'readByUser', 'userRead', 'isReadByDriver', 'driverRead'].forEach(function(x){ if (typeof r.d[x] === 'boolean') up[x] = false; });
     return p.then(function(){ if (Object.keys(up).length) return r.ref.update(up).catch(function(){}); }).then(function(){ return b.guessed; });
   }
   function markRead(r){
     var key = r.col + '/' + r.id; SEEN[key] = Date.now(); keepSeen();
-    var up = {}; F.adminUnread.forEach(function(x){ if (typeof r.d[x] === 'number' && r.d[x] > 0) up[x] = 0; });
+    var up = {}; F.adminUnread.forEach(function(x){ if (typeof r.d[x] === 'number' && r.d[x] > 0) up[x] = 0; if (r.d[x] === true) up[x] = false; });
     ['isReadByAdmin', 'readByAdmin', 'adminRead'].forEach(function(x){ if (r.d[x] === false) up[x] = true; });
     if (Object.keys(up).length) r.ref.update(up).catch(function(e){ console.warn('[app-chats] read', e && e.code); });
   }
@@ -170,9 +173,12 @@
     return d.toDateString() === now.toDateString() ? t : d.toISOString().slice(5, 10).replace('-', '/') + ' ' + t; }
   function thread(r){
     var L = MSGS[r.col + '/' + r.id], msgs;
-    if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, byName: m.admin ? (m.raw.sentByName || '') : '', byRole: m.admin ? (m.raw.sentByRole || '') : '', t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
+    var fromOf = function(m){ if (m.admin) return ''; var sid = String(pick(m.raw, ['senderId', 'senderUid', 'fromId', 'uid']) || '');
+      if (sid && r.d.driverId && sid === String(r.d.driverId)) return 'المندوب: ' + (txt(r.d.driverName) || 'المندوب');
+      if (sid && r.d.userId && sid === String(r.d.userId) && r.d.driverId) return txt(r.d.userName) || ''; return ''; };
+    if (L) msgs = L.map(function(m){ return {me: m.admin ? 1 : 0, fromName: fromOf(m), byName: m.admin ? (m.raw.sentByName || '') : '', byRole: m.admin ? (m.raw.sentByRole || '') : '', t: m.text, at: atT(m.t), atts: m.file ? [{id: 'A' + m.i, name: 'صورة من التطبيق', type: 'image', data: m.file}] : []}; });
     else { var lt = txt(pick(r.d, F.last)); msgs = lt ? [{me: 0, t: lt, at: atT(pick(r.d, F.lastT)), atts: []}] : []; }
-    var info = [txt(pick(r.d, F.phone)), txt(pick(r.d, F.mosque))].filter(Boolean).join(' · ');
+    var info = [txt(pick(r.d, F.phone)), txt(pick(r.d, F.mosque)), txt(r.d.requestType), r.d.driverName && r.col !== 'driverAdminChats' ? 'المندوب: ' + txt(r.d.driverName) : '', r.d.lastOrderId ? 'طلب ' + txt(r.d.lastOrderId) : ''].filter(Boolean).join(' · ');
     return {id: tid(r), _app: 1, req: '', with: title(r), kind: (r.col === 'driverAdminChats' ? 'مندوب (من التطبيق)' : 'مستخدم التطبيق') + (info ? ' · ' + info : ''), unread: unread(r) ? (typeof pick(r.d, F.adminUnread) === 'number' ? pick(r.d, F.adminUnread) : 1) : 0, msgs: msgs};
   }
   var lastSig = '';
