@@ -31,19 +31,32 @@
     return _s.apply(this, arguments);
   };
 
-  /* العرض: «جمعية المساجد بالزلفي · الاسم (الصلاحية)» تحت كل رسالة من الإدارة */
+  /* العرض: اسم المرسل وصلاحيته في سطر مستقل أعلى الرسالة حتى لا تتداخل النصوص */
   function decorate(){
     var box = document.getElementById('msgs'); if (!box || typeof UI === 'undefined') return;
     var t = (S.chats || []).filter(function(c){ return c && c.id === UI.chat; })[0];
     if (!t) { try { t = visibleChats()[0]; } catch(e){} }
     if (!t || !Array.isArray(t.msgs)) return;
     var els = box.querySelectorAll('.msg'); if (els.length !== t.msgs.length) return;
-    for (var i = 0; i < els.length; i++) { var m = t.msgs[i];
-      if (m && m.label) { var sm0 = els[i].querySelector('small'); if (sm0 && !sm0.getAttribute('data-by')) { sm0.setAttribute('data-by', '1'); sm0.textContent = (m.at ? m.at + ' · ' : '') + m.label; } continue; }
-      var L = m && m.me ? label(m) : ''; if (!L) continue;
-      var sm = els[i].querySelector('small'); if (!sm || sm.getAttribute('data-by')) continue;
-      sm.setAttribute('data-by', '1'); var b = document.createElement('b'); b.style.fontWeight = '600'; b.textContent = ' · ' + L; sm.appendChild(b); }
+    for (var i = 0; i < els.length; i++) { var m = t.msgs[i], el = els[i]; if (!m || el.getAttribute('data-by')) continue;
+      var L = m.label || (m.me ? label(m) : ''); if (!L) continue;
+      el.setAttribute('data-by', '1');
+      if (m.label) { var sm = el.querySelector('small'); if (sm) sm.textContent = m.at || ''; }
+      var d = document.createElement('div'); d.className = 'msg-by'; d.textContent = L; el.insertBefore(d, el.firstChild); }
   }
   if (typeof render === 'function') { var _r = render; render = function(){ var x = _r.apply(this, arguments); try { decorate(); } catch(e){} return x; }; }
   new MutationObserver(function(){ try { decorate(); } catch(e){} }).observe(document.body, {childList: true, subtree: true});
+
+  /* ترتيب المحادثات: غير المقروءة أولاً ثم الأحدث */
+  function lastT(c){ var t = +c._t || 0; (c.msgs || []).forEach(function(m){ if (m && +m.ts > t) t = +m.ts; }); return t; }
+  if (typeof visibleChats === 'function') { var _vc = visibleChats; visibleChats = function(){ var L = _vc.apply(this, arguments); if (!Array.isArray(L)) return L;
+    var adm = typeof SESSION !== 'undefined' && SESSION.type === 'admin';
+    return L.map(function(c, i){ return {c: c, i: i, u: adm && c.unread ? 1 : 0, t: lastT(c)}; })
+      .sort(function(a, b){ return (b.u - a.u) || (b.t - a.t) || (a.i - b.i); }).map(function(x){ return x.c; }); }; }
+
+  var st = document.createElement('style');
+  st.textContent = '.chat.wa .msg{padding-bottom:7px;display:flex;flex-direction:column;align-items:stretch}.chat.wa .msg small{position:static;display:block;white-space:normal;margin-top:4px;text-align:left}' +
+    '.msg-by{font-size:.72rem;font-weight:700;color:#8A6F3D;margin-bottom:3px;line-height:1.4}' +
+    ':root[data-theme="dark"] .msg-by{color:#C5A976}@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .msg-by{color:#C5A976}}';
+  document.head.appendChild(st);
 })();
