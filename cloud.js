@@ -25,15 +25,37 @@
 
   var APP = (typeof IS_PORTAL !== 'undefined' && IS_PORTAL) ? 'portal' : 'admin';
   var busy = 0;
-  function upload(dataUrl, name){
+  /* تصغير الصور الكبيرة قبل الرفع (حد الحساب المجاني 10MB) */
+  function shrink(dataUrl){
+    if (dataUrl.length < 1500000) return Promise.resolve(dataUrl);
+    return new Promise(function(res){ var im = new Image(); im.onload = function(){ try {
+        var k = Math.min(1, 2000 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', 0.85)); } catch(e){ res(dataUrl); } };
+      im.onerror = function(){ res(dataUrl); }; im.src = dataUrl; });
+  }
+  function post(dataUrl, name, extra){
     var fd = new FormData();
     fd.append('file', dataUrl);
     fd.append('upload_preset', C.uploadPreset);
-    fd.append('folder', (C.folder || 'zulfi') + '/' + APP);
-    if (name) fd.append('context', 'caption=' + String(name).replace(/[|=]/g, ' ').slice(0, 120));
+    if (extra) { fd.append('folder', (C.folder || 'zulfi') + '/' + APP); if (name) fd.append('context', 'caption=' + String(name).replace(/[|=]/g, ' ').slice(0, 120)); }
     return fetch('https://api.cloudinary.com/v1_1/' + encodeURIComponent(C.cloudName) + '/image/upload', { method: 'POST', body: fd })
-      .then(function(r){ return r.json().then(function(j){ if (!r.ok || !j.secure_url) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status)); return j; }); });
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if (!r.ok || !j.secure_url) { var e = new Error((j.error && j.error.message) || ('HTTP ' + r.status)); e.status = r.status; throw e; } return j; }); });
   }
+  function upload(dataUrl, name){
+    return shrink(dataUrl).then(function(d){
+      return post(d, name, true).catch(function(e){ if (e.status === 400 && !/preset/i.test(e.message)) return post(d, name, false); throw e; });
+    });
+  }
+  /* شرح سبب الفشل بالعربي */
+  function why(e){ var m = String(e && e.message || e || '');
+    if (/preset not found|Upload preset.*not found/i.test(m)) return 'لا يوجد في Cloudinary إعداد رفع باسم «' + C.uploadPreset + '». أنشئه من Settings ← Upload ← Upload presets';
+    if (/whitelisted|unsigned/i.test(m)) return 'إعداد الرفع «' + C.uploadPreset + '» ليس من نوع Unsigned. غيّر Signing Mode إلى Unsigned';
+    if (/cloud_name|Invalid cloud|unknown api_key|401|404/i.test(m)) return 'اسم الحساب في Cloudinary غير صحيح (cloudName)';
+    if (/File size too large|too large/i.test(m)) return 'حجم الصورة أكبر من المسموح في Cloudinary';
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'تعذر الاتصال بـ Cloudinary (تحقق من الإنترنت)';
+    return m; }
+  window.zulfiCloudTest = function(){ var gif = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=';
+    return post(gif, 'test', true).then(function(j){ toast('Cloudinary يعمل: ' + j.secure_url.slice(0, 60), 'cloud_done'); return j; }, function(e){ toast('Cloudinary: ' + why(e), 'cloud_off'); throw e; }); };
 
   var _readFile = readFile;
   readFile = function(f){
@@ -45,7 +67,7 @@
         return o;
       }).catch(function(err){
         console.warn('[cloudinary] تعذر الرفع، حُفظت الصورة محلياً', err);
-        try { toast('تعذر رفع الصورة إلى Cloudinary، حُفظت داخل النظام', 'cloud_off'); } catch(e){}
+        try { toast('تعذر رفع الصورة إلى Cloudinary (' + why(err) + ')، حُفظت داخل النظام', 'cloud_off'); } catch(e){}
         return o;
       }).then(function(o2){ busy--; return o2; });
     });
