@@ -234,7 +234,7 @@
   }
   /* ---------- البوابة: محادثة العميل في التطبيق لكل مهمة جاءت من التطبيق ---------- */
   function commonAdmin(){ var c = {}, best = '', n = 0; (DATA.conversations || []).forEach(function(r){ var a = r.d.adminId; if (a) { c[a] = (c[a] || 0) + 1; if (c[a] > n) { n = c[a]; best = a; } } }); return best; }
-  function isAppReq(r){ return r && r.appRef && r.appRef.id && (r.appUid || r.phone); }
+  function isAppReq(r){ return !!(r && r.appRef && r.appRef.id); }
   function convFor(req){ var L = DATA.conversations || [], u = String(req.appUid || '#'), ph = normPhone(req.phone);
     return L.filter(function(r){ return r.d.lastOrderId && String(r.d.lastOrderId) === String(req.appRef.id); })[0] ||
       L.filter(function(r){ return String(r.d.userId || '') === u || r.id === u; }).sort(function(a, b){ return lastMs(b) - lastMs(a); })[0] ||
@@ -252,7 +252,6 @@
   }
   function portalThreads(){
     if (!(typeof SESSION !== 'undefined' && SESSION.type === 'rep' && typeof myTasks === 'function')) return [];
-    if (STATE.conversations !== 'ok') return [];
     buildGroups(); TARGET = {};
     return myTasks().filter(isAppReq).map(function(req){ return threadP(convFor(req), req); });
   }
@@ -298,7 +297,7 @@
 
   /* إخفاء محادثات «مقدم الطلب» الداخلية لطلبات التطبيق: المحادثة الحقيقية هي محادثة التطبيق */
   function hiddenRR(c){ if (!c || c._app || c.kind !== 'rr') return false; var r = (S.requests || []).filter(function(x){ return x.id === c.req; })[0];
-    if (!r || !r.appRef) return false; return PORTAL ? S.chats.some(function(x){ return x._app && x.req === c.req; }) : true; }
+    return !!(r && r.appRef); }
   if (typeof visibleChats === 'function') { var _vcx = visibleChats; visibleChats = function(){ var L = _vcx.apply(this, arguments); return Array.isArray(L) ? L.filter(function(c){ return !hiddenRR(c); }) : L; }; }
   /* حذف الرسالة الوهمية القديمة «متى يمكنكم الحضور؟» من محادثات مقدمي الطلبات */
   function dropSeed(){ var ch = false; (S.chats || []).forEach(function(c){ if (!c || c._app || !Array.isArray(c.msgs)) return; var n = c.msgs.length;
@@ -315,7 +314,8 @@
     e.preventDefault(); e.stopImmediatePropagation();
     var r = byTid(UI.chat), i = document.getElementById('msgIn'), v = (i && i.value || '').trim();
     var reqId = String(UI.chat).split('@')[1], req = reqId ? (S.requests || []).filter(function(x){ return x.id === reqId; })[0] : null;
-    if (!r && !(PORTAL && req && isAppReq(req) && req.appUid)) { toast(PORTAL ? 'لا يمكن بدء محادثة: هذا العميل غير مرتبط بحساب في التطبيق' : 'المحادثة غير موجودة في التطبيق', 'error'); return; }
+    if (!r && PORTAL && STATE.conversations !== 'ok') { toast(STATE.conversations === 'denied' ? 'القاعدة ترفض قراءة محادثات التطبيق: راجع قواعد الأمان' : 'لم تُحمّل محادثات التطبيق بعد، انتظر لحظات ثم أعد الإرسال', 'hourglass_top'); return; }
+    if (!r && !(PORTAL && req && isAppReq(req) && req.appUid)) { toast(PORTAL ? 'لم يبدأ العميل محادثة في التطبيق، ولم يُربط الطلب بحسابه بعد. افتح لوحة التحكم ليُحدَّث الربط' : 'المحادثة غير موجودة في التطبيق', 'error'); return; }
     var pend = (TMP.chat || []).filter(function(a){ return a && typeof a.data === 'string'; });
     if (!v && !pend.length) return;
     if (pend.length) {
@@ -368,7 +368,7 @@
     return createConv(req, text);
   }
   if (PORTAL) {
-    if (typeof rrThread === 'function') { var _rr = rrThread; rrThread = function(req){ if (isAppReq(req) && STATE.conversations === 'ok') { inject(true); var t = S.chats.filter(function(c){ return c._app && c.req === req.id; })[0]; if (t) return t; } return _rr.apply(this, arguments); }; }
+    if (typeof rrThread === 'function') { var _rr = rrThread; rrThread = function(req){ if (isAppReq(req)) { inject(true); var t = S.chats.filter(function(c){ return c._app && c.req === req.id; })[0]; if (t) return t; } return _rr.apply(this, arguments); }; }
     if (typeof rtMsg === 'function') { var _rt = rtMsg; rtMsg = function(req, t){ if (isAppReq(req) && ready()) { sendToApp(req, t).catch(function(e){ console.warn('[app-chats] rt', e); }); return; } return _rt.apply(this, arguments); }; }
   } else {
     /* لوحة التحكم: حفظ معرّف العميل في التطبيق داخل الطلب المستورد (تستخدمه بوابة المندوب) */
