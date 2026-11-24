@@ -18,7 +18,9 @@
 
   var isShared = function(k){ return k && k.charAt(0) !== '_' && typeof S[k] !== 'function'; };
   var canWrite = function(k){ return isShared(k) && NO_WRITE.indexOf(k) < 0; };
-  var J = function(v){ try { return JSON.stringify(v === undefined ? null : v); } catch(e){ return null; } };
+  /* عناصر محلية فقط (مثل محادثات التطبيق المعروضة في مركز المحادثات) لا تُحفظ ولا تُرفع */
+  var LOCALONLY = function(k, v){ return (Array.isArray(v) && v.some(function(e){ return e && e._app; })) ? v.filter(function(e){ return !(e && e._app); }) : v; };
+  var J = function(v){ try { return JSON.stringify(v === undefined ? null : v, LOCALONLY); } catch(e){ return null; } };
 
   /* ---------- مؤشر الاتصال ---------- */
   var pill = document.createElement('div');
@@ -136,11 +138,12 @@
       },
       subscribe: function(cb){
         col.onSnapshot(function(qs){
-          if (qs.metadata.hasPendingWrites) return;
+          /* لا نتجاهل اللقطة كاملة عند وجود كتابة محلية معلّقة، وإلا ضاعت تحديثات الطرف الآخر التي وصلت معها */
           var ids = [];
           qs.docChanges().forEach(function(ch){
             if (ch.type === 'removed') { delete cache[ch.doc.id]; return; }
-            cache[ch.doc.id] = ch.doc.data(); ids.push(ch.doc.id);
+            cache[ch.doc.id] = ch.doc.data();
+            if (!(ch.doc.metadata && ch.doc.metadata.hasPendingWrites)) ids.push(ch.doc.id);
           });
           var out = {}, any = false;
           keysOf(ids).forEach(function(k){ var s = assemble(k); if (s !== null) { out[k] = s; any = true; } });
@@ -166,11 +169,11 @@
   var seen = {};
   function idArr(v){ return Array.isArray(v) && v.length > 0 && v.every(function(e){ return e && typeof e === 'object' && (typeof e.id === 'string' || typeof e.id === 'number'); }); }
   function ej(e){ var u = e._u; if (u !== undefined) delete e._u; var j = J(e); if (u !== undefined) e._u = u; return j; }
-  function remember(k){ if (!idArr(S[k])) { delete seen[k]; return; } var m = {}; S[k].forEach(function(e){ m[e.id] = ej(e); }); seen[k] = m; }
+  function remember(k){ if (!idArr(S[k])) { delete seen[k]; return; } var m = {}; S[k].forEach(function(e){ if (!e._app) m[e.id] = ej(e); }); seen[k] = m; }
   function stamp(){
     var now = Date.now();
     Object.keys(S).forEach(function(k){ if (!canWrite(k) || !idArr(S[k])) return; var sk = seen[k] || (seen[k] = {});
-      S[k].forEach(function(e){ if (Array.isArray(e.msgs)) e.msgs.forEach(function(m){ if (m && typeof m === 'object' && !m.ts) m.ts = now; });
+      S[k].forEach(function(e){ if (e._app) return; if (Array.isArray(e.msgs)) e.msgs.forEach(function(m){ if (m && typeof m === 'object' && !m.ts) m.ts = now; });
         var j = ej(e); if (sk[e.id] !== j) { e._u = now; sk[e.id] = j; } }); });
   }
   function merge(k, R){
@@ -221,9 +224,9 @@
   /* النسخة المحلية في المتصفح مجرد نسخة احتياطية: البيانات كاملة في Firebase.
      إذا امتلأت مساحة المتصفح تُحفظ نسخة خفيفة بدون الملفات الكبيرة، دون أي تنبيه للمستخدم */
   var LKEY = (typeof STORE !== 'undefined') ? STORE : null, slim = false;
-  function slimmer(k, v){ return (typeof v === 'string' && v.length > 3000 && v.slice(0, 5) === 'data:') ? '' : v; }
+  function slimmer(k, v){ v = LOCALONLY(k, v); return (typeof v === 'string' && v.length > 3000 && v.slice(0, 5) === 'data:') ? '' : v; }
   if (LKEY && typeof save === 'function') save = function(){
-    if (!slim) { try { localStorage.setItem(LKEY, JSON.stringify(S)); return; } catch(e){ slim = true; } }
+    if (!slim) { try { localStorage.setItem(LKEY, JSON.stringify(S, LOCALONLY)); return; } catch(e){ slim = true; } }
     try { localStorage.setItem(LKEY, JSON.stringify(S, slimmer)); }
     catch(e){ try { localStorage.removeItem(LKEY); } catch(x){} }
   };
@@ -277,6 +280,11 @@
     Object.keys(S).forEach(function(k){ if (canWrite(k) && !(k in remote)) delete base[k]; });
     push();
     adapter.subscribe(function(m){ apply(m); });
+    /* عند الرجوع للصفحة (خصوصاً في الجوال) تُجلب آخر نسخة من القاعدة */
+    var lastResync = Date.now();
+    var resync = function(){ if (document.visibilityState === 'hidden' || Date.now() - lastResync < 15000) return; lastResync = Date.now();
+      adapter.loadAll().then(function(m){ apply(m); }).catch(function(e){ console.warn('[zulfi-sync] resync', e); }); };
+    document.addEventListener('visibilitychange', resync); window.addEventListener('focus', resync); window.addEventListener('online', resync);
     clearTimeout(veilTimer); showVeil(false);
     status('ok', 'متصل بقاعدة البيانات · ' + adapter.name);
     safeRender();
