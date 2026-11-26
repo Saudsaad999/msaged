@@ -1654,10 +1654,10 @@ function esOpen(id,auto){const d=S.sdocs.find(x=>x.id===id);const next=nextFor(d
   const fix=()=>{const s=UI.esPlace;Object.assign(next,{status:'موقّع',img:s.img,at:s.at,code:s.code,name:s.name,title:s.title,pos:{...pos}});UI.esPlace=null;
     if(d.signers.every(x=>x.status==='موقّع')){d.status='مكتمل';S.notifs.unshift({t:`اكتمل توقيع الملف: ${d.title}`,at:'الآن',go:'esign'})}logIt(`توقيع حي على ${d.id}`);toast(d.status==='مكتمل'?'ثُبّت التوقيع واكتملت التوقيعات، يمكنك تحميل الملف':'ثُبّت التوقيع وانتقل الملف للموقّع التالي','push_pin');save();render();w.remove();setTimeout(()=>esOpen(d.id),40)}}
 const sigStampHTML=s=>s.pos.h?`<div class="doc-stamp fit" style="left:${s.pos.x*100}%;top:${s.pos.y*100}%;width:${s.pos.w*100}%;height:${s.pos.h*100}%"><img src="${s.img}" alt=""><span class="num st-when" dir="ltr">${esc(s.at||'')} · ${esc(s.code||'')}</span></div>`:`<div class="doc-stamp" style="left:${s.pos.x*100}%;top:${s.pos.y*100}%;width:${(s.pos.w||.18)*100}%"><span class="st-who"><b>${esc(s.name||'')}</b>${s.title?` · ${esc(s.title)}`:''}</span><img src="${s.img}" alt=""><span class="num st-when" dir="ltr">${esc(s.at||'')} · ${esc(s.code||'')}</span></div>`;
-async function esDownload(d){if(!window.jspdf){toast('مكتبة PDF لم تُحمّل بعد','info');return}const {jsPDF}=window.jspdf;const W=d.w||1240,H=d.h||1754;const pdf=new jsPDF({unit:'pt',format:[W*.6,H*.6],orientation:W>H?'l':'p',compress:true});
+async function esDownload(d){if(!window.jspdf){toast('مكتبة PDF لم تُحمّل بعد','info');return}const {jsPDF}=window.jspdf;const W=d.w||1240,H=d.h||1754;const pdf=new jsPDF({unit:'pt',format:'a4',orientation:W>H?'l':'p',compress:true});
   for(let i=0;i<d.pages.length;i++){const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');const im=await loadImg(d.pages[i]);g.drawImage(im,0,0,W,H);
     for(const s of d.signers.filter(x=>x.img&&x.pos?.p===i)){const si=await loadImg(s.img);if(s.pos.h){const bx=s.pos.x*W,by=s.pos.y*H,bw=s.pos.w*W,bh=s.pos.h*H,dl=W*.012,ah=bh-dl-2,k=Math.min(bw/si.width,ah/si.height),iw=si.width*k,ih=si.height*k;g.drawImage(si,bx+(bw-iw)/2,by+(ah-ih)/2,iw,ih);g.font=`500 ${Math.round(W*.0085)}px Tahoma`;g.fillStyle='#5B7383';g.direction='ltr';g.textAlign='center';g.textBaseline='top';g.fillText(`${s.at} · ${s.code}`,bx+bw/2,by+bh-dl);continue}const sw=W*(s.pos.w||.18),sh=sw*si.height/si.width,x=s.pos.x*W,y=s.pos.y*H,lh=W*.018;g.textBaseline='top';g.textAlign='right';g.direction='rtl';g.fillStyle='#143C54';g.font=`700 ${Math.round(W*.012)}px "IBM Plex Sans Arabic",Tahoma`;g.fillText(`${s.name}${s.title?' · '+s.title:''}`,x+sw,y);g.drawImage(si,x,y+lh,sw,sh);g.font=`500 ${Math.round(W*.01)}px Tahoma`;g.fillStyle='#5B7383';g.direction='ltr';g.textAlign='left';g.fillText(`${s.at} · ${s.code}`,x,y+lh+sh+4)}
-    if(i)pdf.addPage([W*.6,H*.6],W>H?'l':'p');pdf.addImage(c.toDataURL('image/jpeg',.88),'JPEG',0,0,W*.6,H*.6)}
+    if(i)pdf.addPage('a4',W>H?'l':'p');{const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),k=Math.min(pw/W,ph/H);pdf.addImage(c.toDataURL('image/jpeg',.88),'JPEG',(pw-W*k)/2,(ph-H*k)/2,W*k,H*k)}}
   await saveFile(`${d.status==='مكتمل'?'موقّع':'مسودة-توقيع'}-${d.id}.pdf`,pdf.output('blob'))}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act="esUp"],[data-act="esF"],[data-act="esOpen"],[data-act="esDl"]');if(!t)return;e.stopImmediatePropagation();const a=t.dataset.act,id=t.dataset.id;
   if(a==='esUp')esUpload();else if(a==='esF'){UI.esF=id;render()}else if(a==='esOpen'){const d=S.sdocs.find(x=>x.id===id);if(!d.pages.length){toast('جاري تجهيز المعاينة','hourglass_top');return}esOpen(id)}else{esDownload(S.sdocs.find(x=>x.id===id))}},true);
@@ -4507,5 +4507,7 @@ try{if(typeof SESSION!=='undefined'){SESSION.type='admin';SESSION.id=null}if(typ
 <script src="chatby.js"></script>
 <script src="donorx.js"></script>
 <script src="stamp.js"></script>
+<script src="letterhead.js"></script>
 <script src="bookflow.js"></script>
+<script src="projdocs.js"></script>
 </body></html>
