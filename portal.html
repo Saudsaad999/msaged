@@ -1338,8 +1338,8 @@ const BOTTOM={'مندوب':['p_home','p_tasks','chats','p_notifs','p_profile'],'
 const _render=render;
 render=function(){const out=SESSION.type!=='rep';document.body.classList.toggle('logged-out',out);
   if(out){$('#view').innerHTML=VIEWS.login();$('#bottomNav').innerHTML='';save();return}
-  _render();const items=navFor()[0].items;
-  $('#bottomNav').innerHTML=BOTTOM[roleKey()].map(k=>{const it=items.find(i=>i.k===k);const b=it.b?it.b():0;return `<button class="bn ${UI.view===k?'on':''}" data-go="${k}">${ic(it.i,UI.view===k)}<span>${it.t}</span>${b?`<i class="num">${b}</i>`:''}</button>`}).join('');
+  _render();const items=[].concat.apply([],navFor().map(g=>g.items||[]));
+  $('#bottomNav').innerHTML=BOTTOM[roleKey()].map(k=>{const it=items.find(i=>i.k===k);if(!it)return '';const b=it.b?it.b():0;return `<button class="bn ${UI.view===k?'on':''}" data-go="${k}">${ic(it.i,UI.view===k)}<span>${it.t}</span>${b?`<i class="num">${b}</i>`:''}</button>`}).join('');
   const n=myNotifs().length;$('#notifDot').textContent=n;$('#notifDot').hidden=!n;$('#portalBar').innerHTML='';};
 go=function(k){if(SESSION.type!=='rep'){UI.view='login';render();return}if(!VIEWS[k]||!allowed(k))k='p_home';UI.view=k;try{history.replaceState(null,'','#'+k)}catch(e){}render();$('#rail').classList.remove('open');window.scrollTo(0,0)};
 
@@ -2586,10 +2586,10 @@ function psOpen(id,auto){const d=S.psdocs.find(x=>x.id===id);if(!d)return;let P=
     pos.x=Math.max(0,Math.min(1-pos.w,(e.clientX-dr.dx-r.left)/r.width));pos.y=Math.max(0,Math.min(.94,(e.clientY-dr.dy-r.top)/r.height));dr.el.style.left=pos.x*100+'%';dr.el.style.top=pos.y*100+'%';
     const box=$('.doc-pages',w),br=box.getBoundingClientRect();if(e.clientY>br.bottom-30)box.scrollTop+=12;else if(e.clientY<br.top+30)box.scrollTop-=12});
   const end=()=>{if(dr){dr.el.classList.remove('moving');dr=null}};w.addEventListener('pointerup',end);w.addEventListener('pointercancel',end)}
-async function psDownload(d){if(!window.jspdf){toast('مكتبة PDF لم تُحمّل بعد، تأكد من الاتصال','info');return}const {jsPDF}=window.jspdf;const W=d.w||1240,H=d.h||1754;const pdf=new jsPDF({unit:'pt',format:[W*.6,H*.6],orientation:W>H?'l':'p',compress:true});
+async function psDownload(d){if(!window.jspdf){toast('مكتبة PDF لم تُحمّل بعد، تأكد من الاتصال','info');return}const {jsPDF}=window.jspdf;const W=d.w||1240,H=d.h||1754;const pdf=new jsPDF({unit:'pt',format:'a4',orientation:W>H?'l':'p',compress:true});
   for(let i=0;i<d.pages.length;i++){const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');g.drawImage(await loadImg(d.pages[i]),0,0,W,H);
     for(const s of d.sigs.filter(x=>x.pos.p===i)){const si=await loadImg(s.img);const sw=W*s.pos.w,sh=sw*si.height/si.width,x=s.pos.x*W,y=s.pos.y*H,lh=W*.018;g.textBaseline='top';g.textAlign='right';g.direction='rtl';g.fillStyle='#143C54';g.font=`700 ${Math.round(W*.012)}px "IBM Plex Sans Arabic",Tahoma`;g.fillText(`${s.name}${s.title?' · '+s.title:''}`,x+sw,y);g.drawImage(si,x,y+lh,sw,sh);g.font=`500 ${Math.round(W*.01)}px Tahoma`;g.fillStyle='#5B7383';g.direction='ltr';g.textAlign='left';g.fillText(`${s.at} · ${s.code}`,x,y+lh+sh+4)}
-    if(i)pdf.addPage([W*.6,H*.6],W>H?'l':'p');pdf.addImage(c.toDataURL('image/jpeg',.88),'JPEG',0,0,W*.6,H*.6)}
+    if(i)pdf.addPage('a4',W>H?'l':'p');{const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),k=Math.min(pw/W,ph/H);pdf.addImage(c.toDataURL('image/jpeg',.88),'JPEG',(pw-W*k)/2,(ph-H*k)/2,W*k,H*k)}}
   await saveFile(`${d.sigs.length?'موقّع':'ملف'}-${d.id}.pdf`,pdf.output('blob'))}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act="psUp"],[data-act="psOpen"],[data-act="psDl"],[data-act="psDel"]');if(!t)return;e.stopImmediatePropagation();const a=t.dataset.act,id=t.dataset.id,d=S.psdocs.find(x=>x.id===id);
   if(a==='psUp')psUpload();else if(a==='psOpen')psOpen(id);else if(a==='psDl'&&d)psDownload(d);
@@ -2790,5 +2790,8 @@ try{if(typeof SESSION!=='undefined'){SESSION.type='admin';SESSION.id=null}if(typ
 <script src="appchats.js"></script>
 <script src="chatby.js"></script>
 <script src="stamp.js"></script>
+<script src="letterhead.js"></script>
 <script src="bookflow.js"></script>
+<script src="projdocs.js"></script>
+<script src="portalx.js"></script>
 </body></html>
